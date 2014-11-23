@@ -52,6 +52,7 @@ def getTable(stpfile, startRE, endRE):
 def skipTo(stpfile, RE):
     FirstLine = re.compile(RE)
     patternFound = False
+    stpline = ''
 
     for stpline in stpfile:
         if FirstLine.match(stpline):
@@ -140,12 +141,21 @@ if __name__ == "__main__":
                 #    symid,long,Key,ArchiveLast
                 #    ios per sec,longlong,ConvertToRate,ArchiveStats,sortDescending
                 #    reads per sec,longlong,ConvertToRate,ArchiveStats
+                #
+                # Some headers are for contain the tag ConcertToRate
+                # Need to add some logic to do that.
+                #
+                # Others contain 'Derived' and a simple algebra for how to derive that field.
+                # for now, skip the Derived headers
                 if line != '':
                     linevalues = line.split(',')
                     columnName = linevalues[0]
-                    columnAttributes = linevalues[1:-0]
-                    columns.append((columnName,columnAttributes))
-                    # columns.insert(-0,(columnName,columnAttributes))
+                    columnType = linevalues[1]
+                    columnaction = linevalues[2]
+                    if columnaction != "Derived":
+                        columnAttributes = linevalues[1:-0]
+                        columns.append((columnName,columnAttributes))
+                        # columns.insert(-0,(columnName,columnAttributes))
             headers[tableName]=columns
             # print headers
 
@@ -169,7 +179,7 @@ if __name__ == "__main__":
             ## tables = ("Devices",)
             for table in tables:
                 directory = os.getcwd()+'/'+'data'
-                header = ''
+                header = 'TimeStamp'
                 for h in (headers[table]):
                     if header == '':
                         header = h[0]
