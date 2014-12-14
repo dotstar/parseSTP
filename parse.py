@@ -18,7 +18,8 @@
 # <END> 
 # <DATA: Devices TP Pool 2, 5954> 
 
-# Top part of file describes the device and begins 
+# Top part of file describes the device and begins
+
 import os
 import io
 import re
