@@ -21,50 +21,75 @@
 # Top part of file describes the device and begins
 
 import os
+import gzip
+from glob import glob
 import io
 import re
 import time
 import sys
 
 
-def getTable(stpfile, startRE, stopRE):
+
+
+def getTable(stpfile, startRE, stopRE, dieRE):
     # Find the top of the table
     # returns a the lines in the STP file between startRE and endRE
     # returns "None" on EOF
+    # print 'getTable( ',startRE,stopRE,dieRE,')'
+    (patternfound,rc) = (skipTo(stpfile, startRE,dieRE))
+    if rc:
+        returnbuffer = io.StringIO()
+        rc = False
+        if patternfound != None:
+            # Process to the bottom of the table ...
+            for buffer in stpfile:
 
-    patternFound = (skipTo(stpfile, startRE))
-    returnBuffer = io.StringIO()
-    if patternFound:
-        # Process to the bottom of the table ...
-        stop = re.compile(stopRE)
-        for buffer in stpfile:
-            if buffer is None:
-                returnBuffer = None
-            else:
-                if stop.match(buffer):
+                if stopRE.match(buffer):
+                    # print 'found the terminating regExp'
+                    rc = True
                     break
+                elif dieRE.match(buffer):
+                        print 'found beginning of data section ... die'
+                        rc = False
+                        break
+                elif buffer is None:
+                    returnbuffer = None
                 else:
-                    returnBuffer.write(unicode(buffer))
+                    returnbuffer.write(unicode(buffer))
+        else:
+            returnbuffer = None
+            patternfound = None
+            rc = False
     else:
-        returnBuffer = None
-        patternFound = None
-    return (patternFound,returnBuffer)
+        patternfound = None
+        returnbuffer = None
+        rc = False
+    # print(returnbuffer)
+    return (patternfound,returnbuffer,rc)
 
 
-def skipTo(stpfile, RE):
-    FirstLine = re.compile(RE)
-    patternFound = False
+def skipTo(stpfile, RE, dieRE) :
+    # Look forward into the file
+    # searching for RE or dieRE
+    # return rc = True if matching RE
+    # return rc = False if matching dieRE
+
+    firstline = re.compile(RE)
+    patternfound = False
     stpline = ''
 
     for stpline in stpfile:
-        if FirstLine.match(stpline):
-            patternFound = True
+        if RE.match(stpline):
+            patternfound = True
+            break
+        elif dieRE.match(stpline):
+            patternFound = False
             break
 
-    if patternFound:
-        return stpline
+    if patternfound:
+        return (stpline,True)
     else:
-        return None
+        return (None,False)
 
 
 def tsDecode(ts):
@@ -98,9 +123,15 @@ def OpenFile(filename, directoryname, headers):
         f = open(fullyQualifiedName, 'a')
     return (f)
 
+def isRate(table,key):
+    return True
+
 
 def CloseFile(f):
     f.close()
+###
+### MAIN
+###
 
 if __name__ == "__main__":
     tables = ("System", "Devices", "Devices TP Pool 1", "Devices TP Pool 2", "Devices TP Pool 3", "Devices TP Pool 4",
@@ -108,105 +139,131 @@ if __name__ == "__main__":
               "Disks", "External Disks", "RDFAStats", "Rdf-System", "Rdf-Director", "Rdf-Device", "Rdf-Group",
               "Thin Pool Info", "Interconnect")
 
-    infile = 'T1_20141107_080003_000195700621.ttp'
     headers = {}
-    f = open(infile, "r")
-
-    # First sections of the file contain the description of the columns.
-    # Each table name has a metric section
-    # Read these and build the headers for later.
-
-    # Is there a clean way to do this without reading the whole file ?
-    # Does it matter if the net effect is that the file will be in buffer cache for the 2nd pass ?
-    while True:
-        match = '^<METRIC: '
-        startRE = re.compile(match)
-        stopRE = "^<END>"
-
-
-        (firstline,tableText) = getTable(f, startRE, stopRE)
-        if tableText is None:
-            break
+    headerType = dict()   # Keep track of which columns need to be converted to rates.
+    for infile in glob('T1*'):
+        print 'file is:',infile
+        m = re.search('.*.gz$', infile)
+        if (m):
+            compressed = True
+            f = gzip.open(infile, 'r')
         else:
-            tableName = firstline[9:-3]
-            # For unknown reasons, 4 variables are named RDF-* in the metric section and Rdf-* in the Data section
-            # Patch around this for now.
-            if tableName[0:4] == 'RDF-':
-                tableName = re.sub("RDF-","Rdf-",tableName)
-            print "Metric Name: " + tableName
-            buffer = tableText.getvalue().split("\n")
-            columns = []
-            for line in buffer:
-                # For each column there is a CSV with a name and some attributes.
-                # Similar to:
-                #    symid,long,Key,ArchiveLast
-                #    ios per sec,longlong,ConvertToRate,ArchiveStats,sortDescending
-                #    reads per sec,longlong,ConvertToRate,ArchiveStats
-                #
-                # Some headers are for contain the tag ConcertToRate
-                # Need to add some logic to do that.
-                #
-                # Others contain 'Derived' and a simple algebra for how to derive that field.
-                # for now, skip the Derived headers
-                if line != '':
-                    linevalues = line.split(',')
-                    columnName = linevalues[0]
-                    columnType = linevalues[1]
-                    columnaction = linevalues[2]
-                    if columnaction == "Derived":
-                        print('Derived variable',columnName,columnaction)
-                         # For now we skip over derived information.
-                    elif columnaction == "ConvertToRate":
-                        print('Rate variable',columnName,columnaction)
-                    else:
-                        print('variable',columnName,columnaction)
-                        columnAttributes = linevalues[1:-0]
-                        columns.append((columnName,columnAttributes))
-                        # columns.insert(-0,(columnName,columnAttributes))
-            headers[tableName]=columns
-            # print headers
+            compressed = False
+            f = open(infile, "r")
 
+        # First sections of the file contain the description of the columns.
+        # Each table name has a metric section
+        # Read these and build the headers for later.
 
-    f.close()
-    # exit()
-    f = open(infile, "r")
+        # Is there a clean way to do this without reading the whole file ?
+        # Does it matter if the net effect is that the file will be in buffer cache for the 2nd pass ?
+        print "Processing Metrics"
+        while True:
+            match = '^<METRIC: '
+            startRE = re.compile('^<METRIC: ')
+            stopRE = re.compile("^<END>")
+            lastMetricRE = re.compile("^<TIMESTAMP: ")       # If we see a timestamp there are no more Metrics
+            (firstline,tableText,rc) = getTable(f, startRE, stopRE, lastMetricRE)
+            # if tableText is None or rc == False:
+            if tableText is None:
+                break                           # We either ran out of Metrics in the file or didn't see an END.
+            else:
+                tableName = firstline[9:-3]
+                # For unknown reasons, 4 variables are named RDF-* in the metric section and Rdf-* in the Data section
+                # Patch around this for now.
+                if tableName[0:4] == 'RDF-':
+                    tableName = re.sub("RDF-","Rdf-",tableName)
+                print "Metric Name: " + tableName
+                mybuffer = tableText.getvalue().split("\n")
+                columns = []
+                for line in mybuffer:
+                    # For each column there is a CSV with a name and some attributes.
+                    # Similar to:
+                    #    symid,long,Key,ArchiveLast
+                    #    ios per sec,longlong,ConvertToRate,ArchiveStats,sortDescending
+                    #    reads per sec,longlong,ConvertToRate,ArchiveStats
 
-
-    # Here to walk through the rest of the file and collect the data into tables ...
-    while True:
-        ### Get all of the lines starting at the TIMESTAMP ...
-        ts = skipTo(f, "^<TIMESTAMP:.*>")
-        if not ts:  ## When we're out of TIMESTAMPS, we are out of data.  File is complete.
-            break
+                    if line != '':
+                        linevalues = line.split(',')
+                        columnName = linevalues[0]
+                        columnType = linevalues[1]
+                        columnaction = linevalues[2]
+                        if columnaction == "Derived":
+                            # print('Derived variable',columnName,columnaction)
+                            # For now we skip over derived information.
+                            headerType[columnName] = 'Derived'
+                        elif columnaction == "ConvertToRate":
+                            # print('Rate variable',columnName,columnaction)
+                            headerType[columnName] = 'ConvertToRate'
+                        else:
+                            headerType[columnName] = 'other'
+                            # print('variable',columnName,columnaction)
+                        columns.insert(-0,columnName)
+                headers[tableName]=columns
+                # print headers
+        # Now that we've determined which columns are in each table, re-open the file to process the data
+        print "Rewinding file to process data elements."
+        f.close()
+        if compressed:
+            f = gzip.open(infile, 'r')
         else:
-            t = str(tsDecode(ts))
-            # print "time is: ", t
-            sys.stdout.write(".")
-            sys.stdout.flush()
-            ## tables = ("Devices",)
-            for table in tables:
-                directory = os.getcwd()+'/'+'data'
-                header = 'TimeStamp'
-                for h in (headers[table]):
-                    if header == '':
-                        header = h[0]
-                    else:
-                        header += ',' + h[0]
-                header += '\n'
-                outfile = OpenFile(table, directory, header)
+            f = open(infile, "r")
+        lastrow = dict()                    # Used to calculate rates.
+        firsttimestamp = dict()             # Can't calculate a rate on first time stamp ... (need two points)
+        for table in tables:
+            firsttimestamp[table]=True      # Mark each table as fresh / never seen
+        directory = os.getcwd()+'/'+'data'  # Output directory, mkdir if needed.
+        if not os.path.exists(directory):
+            os.makedirs(directory)          # Here to walk through the rest of the file and collect the data into tables ...
+        while True:
+            ### Get all of the lines starting at the TIMESTAMP ...
+            (ts,rc) = skipTo(f, re.compile("^<TIMESTAMP:.*>"),re.compile('xyzzy'))
+            if not ts:  ## When we're out of TIMESTAMPS, we are out of data.  File is complete.
+                break
+            else:
+                t = str(tsDecode(ts))
+                print "time is: ", t
+                # sys.stdout.write(".")  # give the user a sense that we are working ...
+                # sys.stdout.flush()
+                # tables = ("Devices",)
+                for table in tables:
+                    header = 'TimeStamp'
+                    for h in (headers[table]):
+                        header += ',' + h[0]  # Prepare a string for output
+                    header += '\n'
+                    outfile = OpenFile(table, directory, header)
+                    startRE = re.compile("^<DATA: " + table + ".*>")
+                    stopRE = re.compile("^<END>")
+                    dieRE = re.compile('xyzzy')
+                    (firstline,tableText,rc) = getTable(f, startRE, stopRE, dieRE)
+                    mybuffer = tableText.getvalue().split("\n")
+                    stop = re.compile(stopRE)
+                    empty = re.compile("^$")
+                    for line in mybuffer:
+                        values = line.split(",")
+                        key = table+'_'+values[0]
+                        # The last line will match the Regular Expression stopRE ...
+                        # Add time stamp to each line.  Drop the last line.
+                        if not stop.match(line) and not empty.match(line):
+                            if firsttimestamp[table]:
+                                # store all of the columns so we can process rates on the next pass
+                                print 'saving '+key+' for next pass '
+                                lastrow[key] = values  # Keep a copy for next time
+                            else:
+                                i = 0
+                                for k in lastrow[key]:
+                                    print k
+                                    buf = lastrow[k]
+                                    for w in buf:
+                                        print w
+                                    next()
+                                    if isRate(table,key):
+                                        values[k] -= lastrow[k]   # Adjust for Rates.
+                                        line += values[k]
+                                lastrow[key] = values
+                                printme = t + "," + line + '\n'
+                                outfile.write(printme)
+                        else:
+                            firsttimestamp[table] = False
 
-                ## print "processing table", table
-                startRE = "^<DATA: " + table + ".*>"
-                stopRE = "^<END>"
-                (firstline,tableText) = getTable(f, startRE, stopRE)
-                buffer = tableText.getvalue().split("\n")
-
-                stop = re.compile(stopRE)
-                empty = re.compile("^$")
-                for line in buffer:
-                    # The last line will match the Regular Expression stopRE ...
-                    # Add time stamp to each line.  Drop the last line.
-                    if not stop.match(line) and not empty.match(line):
-                        printme = t + "," + line + '\n'
-                        outfile.write(printme)
-                CloseFile(outfile)
+                    CloseFile(outfile)
