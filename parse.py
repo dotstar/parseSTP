@@ -24,9 +24,10 @@ import os
 import io
 import re
 import time
+import sys
 
 
-def getTable(stpfile, startRE, endRE):
+def getTable(stpfile, startRE, stopRE):
     # Find the top of the table
     # returns a the lines in the STP file between startRE and endRE
     # returns "None" on EOF
@@ -74,10 +75,9 @@ def tsDecode(ts):
     year = int((sts[1])[0:4])
     month = int((sts[1])[4:6])
     day = int((sts[1][6:8]))
-    hour = int((sts[2][0:2]))
+    hour = int((sts[2][0:2])) - 1
     minute = int((sts[2][2:4]))
     second = int((sts[2][4:6]))
-    hour = hour - 1  ## Is this converting the hour correctly?  - GMT vs DST ARGH
     t = (year, month, day, hour, minute, second, 0, 0, -1)
     # print ts, year, month, day, hour, minute, second
     retval = int(time.mktime(t))
@@ -153,7 +153,13 @@ if __name__ == "__main__":
                     columnName = linevalues[0]
                     columnType = linevalues[1]
                     columnaction = linevalues[2]
-                    if columnaction != "Derived":
+                    if columnaction == "Derived":
+                        print('Derived variable',columnName,columnaction)
+                         # For now we skip over derived information.
+                    elif columnaction == "ConvertToRate":
+                        print('Rate variable',columnName,columnaction)
+                    else:
+                        print('variable',columnName,columnaction)
                         columnAttributes = linevalues[1:-0]
                         columns.append((columnName,columnAttributes))
                         # columns.insert(-0,(columnName,columnAttributes))
@@ -174,9 +180,9 @@ if __name__ == "__main__":
             break
         else:
             t = str(tsDecode(ts))
-            print "time is: ", t
-
-
+            # print "time is: ", t
+            sys.stdout.write(".")
+            sys.stdout.flush()
             ## tables = ("Devices",)
             for table in tables:
                 directory = os.getcwd()+'/'+'data'
