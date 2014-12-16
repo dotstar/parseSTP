@@ -256,25 +256,26 @@ if __name__ == "__main__":
                                 # print 'saving '+key+' for next pass '
                                 lastrow[key] = values  # Keep a copy for next time
                             else:
+                                # Adjust for Rates
                                 i = 0
                                 for oldvalue in (lastrow[key]):
                                     if isRate(table,i):
                                         delta = int(values[i]) - int(oldvalue)
-                                        print oldvalue,values[i],delta
-                                    else:
-                                        print oldvalue,values[i]
+                                        # print oldvalue,values[i],delta
+                                        values[i] = delta
                                     i += 1
-                                    if False:
-                                        for v in values:
-                                            print k,':',v
-                                            if isRate(table,key):
-                                                values[k] -= int(values[k]) - int(lastrow[k])   # Adjust for Rates.
-                                            line += values[k]
-                                        for d in lastrow:
-                                            print k,":",d
-                                lastrow[key] = values
-                                printme = t + "," + line + '\n'
-                                outfile.write(printme)
+                                # Output the record
+                                pbuf = t
+                                for v in values:
+                                    pbuf = pbuf+','+str(v)
+                                # pbuf += '\n'
+                                outfile.write(pbuf)
+                                print pbuf
+                                # Update the lastrow record, for next time ...
+                                tmpbuf = []
+                                for v in values:
+                                    tmpbuf.insert(-0,v)
+                                lastrow[key] = tmpbuf
                         else:
                             firsttimestamp[table] = False
 
