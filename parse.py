@@ -123,9 +123,13 @@ def OpenFile(filename, directoryname, headers):
         f = open(fullyQualifiedName, 'a')
     return (f)
 
-def isRate(table,key):
-    return True
-
+def isRate(table,i):
+    # Given a table name and column
+    # Returns True if this is a rate column
+    rc = True
+    k = table+'_'+str(i)
+    rc = rateTable[k]
+    return rc
 
 def CloseFile(f):
     f.close()
@@ -133,6 +137,10 @@ def CloseFile(f):
 ### MAIN
 ###
 
+# Global table which tracks which variables are rates and need additional processing
+# True if the column is a Rate
+# Key is tableName_Column
+rateTable = dict()
 if __name__ == "__main__":
     tables = ("System", "Devices", "Devices TP Pool 1", "Devices TP Pool 2", "Devices TP Pool 3", "Devices TP Pool 4",
               "Devices TP Pool 5", "Devices TP Pool 6", "Directors FE", "Directors BE", "Directors RDF", "Ports FE",
@@ -140,7 +148,6 @@ if __name__ == "__main__":
               "Thin Pool Info", "Interconnect")
 
     headers = {}
-    headerType = dict()   # Keep track of which columns need to be converted to rates.
     for infile in glob('T1*'):
         print 'file is:',infile
         m = re.search('.*.gz$', infile)
@@ -176,6 +183,7 @@ if __name__ == "__main__":
                 print "Metric Name: " + tableName
                 mybuffer = tableText.getvalue().split("\n")
                 columns = []
+                colNum = 0
                 for line in mybuffer:
                     # For each column there is a CSV with a name and some attributes.
                     # Similar to:
@@ -183,21 +191,19 @@ if __name__ == "__main__":
                     #    ios per sec,longlong,ConvertToRate,ArchiveStats,sortDescending
                     #    reads per sec,longlong,ConvertToRate,ArchiveStats
 
+                    rkey = tableName+'_'+str(colNum)
+                    colNum += 1
                     if line != '':
                         linevalues = line.split(',')
                         columnName = linevalues[0]
                         columnType = linevalues[1]
                         columnaction = linevalues[2]
                         if columnaction == "Derived":
-                            # print('Derived variable',columnName,columnaction)
-                            # For now we skip over derived information.
-                            headerType[columnName] = 'Derived'
+                            rateTable[rkey] = False
                         elif columnaction == "ConvertToRate":
-                            # print('Rate variable',columnName,columnaction)
-                            headerType[columnName] = 'ConvertToRate'
+                            rateTable[rkey] = True
                         else:
-                            headerType[columnName] = 'other'
-                            # print('variable',columnName,columnaction)
+                            rateTable[rkey] = False
                         columns.insert(-0,columnName)
                 headers[tableName]=columns
                 # print headers
@@ -247,19 +253,25 @@ if __name__ == "__main__":
                         if not stop.match(line) and not empty.match(line):
                             if firsttimestamp[table]:
                                 # store all of the columns so we can process rates on the next pass
-                                print 'saving '+key+' for next pass '
+                                # print 'saving '+key+' for next pass '
                                 lastrow[key] = values  # Keep a copy for next time
                             else:
                                 i = 0
-                                for k in lastrow[key]:
-                                    print k
-                                    buf = lastrow[k]
-                                    for w in buf:
-                                        print w
-                                    next()
-                                    if isRate(table,key):
-                                        values[k] -= lastrow[k]   # Adjust for Rates.
-                                        line += values[k]
+                                for oldvalue in (lastrow[key]):
+                                    if isRate(table,i):
+                                        delta = int(values[i]) - int(oldvalue)
+                                        print oldvalue,values[i],delta
+                                    else:
+                                        print oldvalue,values[i]
+                                    i += 1
+                                    if False:
+                                        for v in values:
+                                            print k,':',v
+                                            if isRate(table,key):
+                                                values[k] -= int(values[k]) - int(lastrow[k])   # Adjust for Rates.
+                                            line += values[k]
+                                        for d in lastrow:
+                                            print k,":",d
                                 lastrow[key] = values
                                 printme = t + "," + line + '\n'
                                 outfile.write(printme)
