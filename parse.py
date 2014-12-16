@@ -3,12 +3,12 @@
 # Parse EMC Symmetrix STP File
 # which reflects performance data for Symmetrix/VMAX
 # Data is ASCII or Compressed ASCII
-# File has sections which begine with ^<word:  and end with ^<END>
+# File has sections which begins with ^<word:  and end with ^<END>
 # top of file describes the device
 # <VERSION> <Symmetrix> <TIMEZONE> <TIME INTERVAL> <CONFIGURATION>
 # Then a series of sections describing the tables
 # <METRIC: ____>
-# Then a bunch of tables, seperated by timestamps
+# Then a bunch of tables, separated by timestamps
 # <TIMESTAMP: 20141107, 080003>
 # <DATA: System>
 # <END>
@@ -26,7 +26,6 @@ from glob import glob
 import io
 import re
 import time
-import sys
 
 
 
@@ -40,22 +39,22 @@ def getTable(stpfile, startRE, stopRE, dieRE):
     if rc:
         returnbuffer = io.StringIO()
         rc = False
-        if patternfound != None:
+        if patternfound is not None:
             # Process to the bottom of the table ...
-            for buffer in stpfile:
+            for stpbuffer in stpfile:
 
-                if stopRE.match(buffer):
+                if stopRE.match(stpbuffer):
                     # print 'found the terminating regExp'
                     rc = True
                     break
-                elif dieRE.match(buffer):
+                elif dieRE.match(stpbuffer):
                         print 'found beginning of data section ... die'
                         rc = False
                         break
-                elif buffer is None:
+                elif stpbuffer is None:
                     returnbuffer = None
                 else:
-                    returnbuffer.write(unicode(buffer))
+                    returnbuffer.write(unicode(stpbuffer))
         else:
             returnbuffer = None
             patternfound = None
@@ -65,7 +64,7 @@ def getTable(stpfile, startRE, stopRE, dieRE):
         returnbuffer = None
         rc = False
     # print(returnbuffer)
-    return (patternfound,returnbuffer,rc)
+    return patternfound,returnbuffer,rc
 
 
 def skipTo(stpfile, firstRE, dieRE) :
@@ -82,13 +81,13 @@ def skipTo(stpfile, firstRE, dieRE) :
             patternfound = True
             break
         elif dieRE.match(stpline):
-            patternFound = False
+            patternfound = False
             break
 
     if patternfound:
-        return (stpline,True)
+        return stpline,True
     else:
-        return (None,False)
+        return None,False
 
 
 def tsDecode(ts):
@@ -105,7 +104,7 @@ def tsDecode(ts):
     t = (year, month, day, hour, minute, second, 0, 0, -1)
     # print ts, year, month, day, hour, minute, second
     retval = int(time.mktime(t))
-    return (retval)
+    return retval
 
 
 def OpenFile(filename, directoryname, headers):
@@ -120,7 +119,7 @@ def OpenFile(filename, directoryname, headers):
         f.write(headers)
     else:
         f = open(fullyQualifiedName, 'a')
-    return (f)
+    return f
 
 def setRate(table,i,rateFlag):
     # Tag column i of table as a rate field
@@ -131,7 +130,6 @@ def isRate(table,i):
     # Given a table name and column
     # Returns True if this is
     #  rate column
-    rc = True
     k = table+'_'+str(i)
     if debug > 59:
         print 'in isRate, key is',k
@@ -150,7 +148,6 @@ def processHeaders(fp):
     # Does it matter if the net effect is that the file will be in buffer cache for the 2nd pass ?
     print "Processing Headers and Metrics"
     while True:
-        match = '^<METRIC: '
         startRE = re.compile('^<METRIC: ')
         stopRE = re.compile("^<END>")
         lastMetricRE = re.compile("^<TIMESTAMP: ")       # If we see a timestamp there are no more Metrics
@@ -176,11 +173,9 @@ def processHeaders(fp):
                 #    ios per sec,longlong,ConvertToRate,ArchiveStats,sortDescending
                 #    reads per sec,longlong,ConvertToRate,ArchiveStats
 
-                rkey = tableName+'_'+str(colNum)
                 if line != '':
                     linevalues = line.split(',')
                     columnName = linevalues[0]
-                    columnType = linevalues[1]
                     columnaction = linevalues[2]
                     if columnaction == "Derived":
                         setRate(tableName,colNum,False)
@@ -194,14 +189,14 @@ def processHeaders(fp):
     # Build header string in global variable, one for each table.
 
 
-    return (headers,True)
+    return headers,True
 
 def myopen(name,mode):
-    if (m):
-        compressed = True
+    print 'file is:',name
+    m = re.search('.*.gz$', infile)
+    if m:
         f = gzip.open(name, mode)
     else:
-        compressed = False
         f = open(name,mode)
     return f
 
@@ -221,9 +216,9 @@ if __name__ == "__main__":
               "Devices TP Pool 5", "Devices TP Pool 6", "Directors FE", "Directors BE", "Directors RDF", "Ports FE",
               "Disks", "External Disks", "RDFAStats", "Rdf-System", "Rdf-Director", "Rdf-Device", "Rdf-Group",
               "Thin Pool Info", "Interconnect")
+    tables = ("System","Devices TP Pool 1")
     for infile in glob('T1*'):
-        print 'file is:',infile
-        m = re.search('.*.gz$', infile)
+
 
         f = myopen(infile,"r")
 
@@ -268,15 +263,17 @@ if __name__ == "__main__":
                     dieRE = re.compile('xyzzy')
                     (firstline,tableText,rc) = getTable(f, startRE, stopRE, dieRE)
                     mybuffer = tableText.getvalue().split("\n")     # Process one line at a time.
-                    stop = re.compile(stopRE)
-                    empty = re.compile("^$")
+
+                    emptyRE = re.compile("^$")
+
                     for line in mybuffer:
                         line = line.rstrip()                        # remove CR NL and trailing blanks
                         values = line.split(",")
+                        pvalues = []
                         key = table+'_'+values[0]
                         # The last line will match the Regular Expression stopRE ...
                         # Add time stamp to each line.  Drop the last line.
-                        if not stop.match(line) and not empty.match(line):
+                        if not stopRE.match(line) and not emptyRE.match(line):
                             if firsttimestamp[table]:
                                 # store all of the columns so we can process rates on the next pass
                                 # print 'saving '+key+' for next pass '
@@ -285,12 +282,16 @@ if __name__ == "__main__":
                                 i = 0
                                 for oldvalue in (lastrow[key]):     # adjust for rate variables
                                     if oldvalue != "" and oldvalue != " ":
+                                        if debug > 9:
+                                            print 'calling inRate,key:',key,'table:',table,'column:',i
                                         if isRate(table,i):
                                             delta = long(float(values[i]) - float(oldvalue))
-                                            values[i] = delta
+                                            pvalues.append(delta)
+                                        else:
+                                            pvalues.append(values[i])
                                     i += 1
                                 pbuf = t
-                                for v in values:
+                                for v in pvalues:
                                     pbuf = pbuf+','+str(v)
                                 pbuf += '\n'
                                 outfile.write(pbuf)                    # output the record
