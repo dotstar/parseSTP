@@ -68,18 +68,17 @@ def getTable(stpfile, startRE, stopRE, dieRE):
     return (patternfound,returnbuffer,rc)
 
 
-def skipTo(stpfile, RE, dieRE) :
+def skipTo(stpfile, firstRE, dieRE) :
     # Look forward into the file
     # searching for RE or dieRE
     # return rc = True if matching RE
     # return rc = False if matching dieRE
 
-    firstline = re.compile(RE)
     patternfound = False
     stpline = ''
 
     for stpline in stpfile:
-        if RE.match(stpline):
+        if firstRE.match(stpline):
             patternfound = True
             break
         elif dieRE.match(stpline):
@@ -123,16 +122,77 @@ def OpenFile(filename, directoryname, headers):
         f = open(fullyQualifiedName, 'a')
     return (f)
 
+def setRate(table,i,rateFlag):
+    # Tag column i of table as a rate field
+    k = table+'_'+str(i)
+    rateTable[k] = rateFlag
+
 def isRate(table,i):
     # Given a table name and column
-    # Returns True if this is a rate column
+    # Returns True if this is
+    #  rate column
     rc = True
     k = table+'_'+str(i)
+    if debug > 59:
+        print 'in isRate, key is',k
+    if debug > 59:
+        print 'contents of rateTable (keys only):'
+        for key in rateTable.keys():
+            print key,rateTable[key]
     rc = rateTable[k]
     return rc
 
 def CloseFile(f):
     f.close()
+
+def processHeaders(fp):
+    # Is there a clean way to do this without reading the whole file ?
+    # Does it matter if the net effect is that the file will be in buffer cache for the 2nd pass ?
+    print "Processing Headers and Metrics"
+    while True:
+        match = '^<METRIC: '
+        startRE = re.compile('^<METRIC: ')
+        stopRE = re.compile("^<END>")
+        lastMetricRE = re.compile("^<TIMESTAMP: ")       # If we see a timestamp there are no more Metrics
+        (firstline,tableText,rc) = getTable(fp, startRE, stopRE, lastMetricRE)
+        # if tableText is None or rc == False:
+        if tableText is None:
+            break                           # We either ran out of Metrics in the file or didn't see an END.
+        else:
+            tableName = firstline[9:-3]
+            # For unknown reasons, 4 variables are named RDF-* in the metric section and Rdf-* in the Data section
+            # Patch around this for now.
+            if tableName[0:4] == 'RDF-':
+                tableName = re.sub("RDF-","Rdf-",tableName)
+            if debug > 9:
+                print "Metric Name: " + tableName
+            mybuffer = tableText.getvalue().split("\n")
+            columns = []
+            colNum = 0
+            for line in mybuffer:
+                # For each column there is a CSV with a name and some attributes.
+                # Similar to:
+                #    symid,long,Key,ArchiveLast
+                #    ios per sec,longlong,ConvertToRate,ArchiveStats,sortDescending
+                #    reads per sec,longlong,ConvertToRate,ArchiveStats
+
+                rkey = tableName+'_'+str(colNum)
+                if line != '':
+                    linevalues = line.split(',')
+                    columnName = linevalues[0]
+                    columnType = linevalues[1]
+                    columnaction = linevalues[2]
+                    if columnaction == "Derived":
+                        setRate(tableName,colNum,False)
+                    elif columnaction == "ConvertToRate":
+                        setRate(tableName,colNum,True)
+                    else:
+                        setRate(tableName,colNum,False)
+                    columns.insert(-0,columnName)
+                colNum += 1
+            headers[tableName]=columns
+    # print headers
+    return (headers,True)
 ###
 ### MAIN
 ###
@@ -141,12 +201,12 @@ def CloseFile(f):
 # True if the column is a Rate
 # Key is tableName_Column
 rateTable = dict()
+debug = 45
 if __name__ == "__main__":
     tables = ("System", "Devices", "Devices TP Pool 1", "Devices TP Pool 2", "Devices TP Pool 3", "Devices TP Pool 4",
               "Devices TP Pool 5", "Devices TP Pool 6", "Directors FE", "Directors BE", "Directors RDF", "Ports FE",
               "Disks", "External Disks", "RDFAStats", "Rdf-System", "Rdf-Director", "Rdf-Device", "Rdf-Group",
               "Thin Pool Info", "Interconnect")
-
     headers = {}
     for infile in glob('T1*'):
         print 'file is:',infile
@@ -158,55 +218,11 @@ if __name__ == "__main__":
             compressed = False
             f = open(infile, "r")
 
-        # First sections of the file contain the description of the columns.
-        # Each table name has a metric section
-        # Read these and build the headers for later.
+        (headers,rc) = processHeaders(f)
+        if not rc:
+            print 'processHeaders indicates failure'
+            exit()
 
-        # Is there a clean way to do this without reading the whole file ?
-        # Does it matter if the net effect is that the file will be in buffer cache for the 2nd pass ?
-        print "Processing Metrics"
-        while True:
-            match = '^<METRIC: '
-            startRE = re.compile('^<METRIC: ')
-            stopRE = re.compile("^<END>")
-            lastMetricRE = re.compile("^<TIMESTAMP: ")       # If we see a timestamp there are no more Metrics
-            (firstline,tableText,rc) = getTable(f, startRE, stopRE, lastMetricRE)
-            # if tableText is None or rc == False:
-            if tableText is None:
-                break                           # We either ran out of Metrics in the file or didn't see an END.
-            else:
-                tableName = firstline[9:-3]
-                # For unknown reasons, 4 variables are named RDF-* in the metric section and Rdf-* in the Data section
-                # Patch around this for now.
-                if tableName[0:4] == 'RDF-':
-                    tableName = re.sub("RDF-","Rdf-",tableName)
-                print "Metric Name: " + tableName
-                mybuffer = tableText.getvalue().split("\n")
-                columns = []
-                colNum = 0
-                for line in mybuffer:
-                    # For each column there is a CSV with a name and some attributes.
-                    # Similar to:
-                    #    symid,long,Key,ArchiveLast
-                    #    ios per sec,longlong,ConvertToRate,ArchiveStats,sortDescending
-                    #    reads per sec,longlong,ConvertToRate,ArchiveStats
-
-                    rkey = tableName+'_'+str(colNum)
-                    colNum += 1
-                    if line != '':
-                        linevalues = line.split(',')
-                        columnName = linevalues[0]
-                        columnType = linevalues[1]
-                        columnaction = linevalues[2]
-                        if columnaction == "Derived":
-                            rateTable[rkey] = False
-                        elif columnaction == "ConvertToRate":
-                            rateTable[rkey] = True
-                        else:
-                            rateTable[rkey] = False
-                        columns.insert(-0,columnName)
-                headers[tableName]=columns
-                # print headers
         # Now that we've determined which columns are in each table, re-open the file to process the data
         print "Rewinding file to process data elements."
         f.close()
@@ -235,7 +251,7 @@ if __name__ == "__main__":
                 for table in tables:
                     header = 'TimeStamp'
                     for h in (headers[table]):
-                        header += ',' + h[0]  # Prepare a string for output
+                        header += ',' + h  # Prepare a string for output
                     header += '\n'
                     outfile = OpenFile(table, directory, header)
                     startRE = re.compile("^<DATA: " + table + ".*>")
@@ -259,18 +275,23 @@ if __name__ == "__main__":
                                 # Adjust for Rates
                                 i = 0
                                 for oldvalue in (lastrow[key]):
-                                    if isRate(table,i):
-                                        delta = int(values[i]) - int(oldvalue)
-                                        # print oldvalue,values[i],delta
-                                        values[i] = delta
+                                    # print 'oldvalue =',oldvalue
+                                    if oldvalue != "" and oldvalue != " ":
+                                        if isRate(table,i):
+                                            # print table,i,oldvalue,values[i],
+                                            delta = long(float(values[i]) - float(oldvalue))
+                                            # print delta
+                                            values[i] = delta
                                     i += 1
                                 # Output the record
                                 pbuf = t
                                 for v in values:
                                     pbuf = pbuf+','+str(v)
-                                # pbuf += '\n'
+                                pbuf += '\n'
                                 outfile.write(pbuf)
-                                print pbuf
+                                debug = 0
+                                if debug > 9:
+                                    print pbuf
                                 # Update the lastrow record, for next time ...
                                 tmpbuf = []
                                 for v in values:
