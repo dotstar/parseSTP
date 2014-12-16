@@ -137,7 +137,12 @@ def isRate(table,i):
         print 'contents of rateTable (keys only):'
         for key in rateTable.keys():
             print key,rateTable[key]
-    rc = rateTable[k]
+    try:
+        rc = rateTable[k]
+    except KeyError:
+        if debug > 5:
+            print 'KeyError in isRate, table:',table,'column:',i
+        rc = False
     return rc
 
 def CloseFile(f):
@@ -183,7 +188,7 @@ def processHeaders(fp):
                         setRate(tableName,colNum,True)
                     else:
                         setRate(tableName,colNum,False)
-                    columns.insert(-0,columnName)
+                    columns.append(columnName)
                 colNum += 1
             headers[tableName]=columns
     # Build header string in global variable, one for each table.
@@ -200,6 +205,8 @@ def myopen(name,mode):
         f = open(name,mode)
     return f
 
+
+
 ###
 ### MAIN
 ###
@@ -210,15 +217,15 @@ def myopen(name,mode):
 rateTable = dict()
 headers = {}
 
-debug = 45
+debug = 9
 if __name__ == "__main__":
     tables = ("System", "Devices", "Devices TP Pool 1", "Devices TP Pool 2", "Devices TP Pool 3", "Devices TP Pool 4",
               "Devices TP Pool 5", "Devices TP Pool 6", "Directors FE", "Directors BE", "Directors RDF", "Ports FE",
               "Disks", "External Disks", "RDFAStats", "Rdf-System", "Rdf-Director", "Rdf-Device", "Rdf-Group",
               "Thin Pool Info", "Interconnect")
-    tables = ("System","Devices TP Pool 1")
+    # tables = ("Devices TP Pool 1","Rdf-Group")
+    
     for infile in glob('T1*'):
-
 
         f = myopen(infile,"r")
 
@@ -232,7 +239,7 @@ if __name__ == "__main__":
         f.close()
         f = myopen(infile,"r")
 
-        lastrow = dict()                    # Used to calculate rates.
+        priorrow = dict()                    # Used to calculate rates.
         firsttimestamp = dict()             # Can't calculate a rate on first time stamp ... (need two points)
         for table in tables:
             firsttimestamp[table]=True      # Mark each table as fresh / never seen
@@ -240,7 +247,7 @@ if __name__ == "__main__":
         if not os.path.exists(directory):
             os.makedirs(directory)          # Here to walk through the rest of the file and collect the data into tables ...
         while True:
-            ### Get all of the lines starting at the TIMESTAMP ...
+            ### Get all of the lines starting at the TIMESTAMP45 ...
             (ts,rc) = skipTo(f, re.compile("^<TIMESTAMP:.*>"),re.compile('xyzzy'))
             if not ts:  ## When we're out of TIMESTAMPS, we are out of data.  File is complete.
                 break
@@ -277,12 +284,18 @@ if __name__ == "__main__":
                             if firsttimestamp[table]:
                                 # store all of the columns so we can process rates on the next pass
                                 # print 'saving '+key+' for next pass '
-                                lastrow[key] = values  # Keep a copy for next time
+                                priorrow[key] = values  # Keep a copy for next time
                             else:
                                 i = 0
-                                for oldvalue in (lastrow[key]):     # adjust for rate variables
+                                for oldvalue in (priorrow[key]):     # adjust for rate variables
+                                    if debug > 19:
+                                        print 'prior row has ',len(priorrow[key]),'columns'
+                                        print 'table:',table,'i:',i,'keys: ',
+                                        for k in priorrow[key]:
+                                            print k,
+                                        print '\n'
                                     if oldvalue != "" and oldvalue != " ":
-                                        if debug > 9:
+                                        if debug > 10:
                                             print 'calling inRate,key:',key,'table:',table,'column:',i
                                         if isRate(table,i):
                                             delta = long(float(values[i]) - float(oldvalue))
@@ -297,11 +310,11 @@ if __name__ == "__main__":
                                 outfile.write(pbuf)                    # output the record
                                 if debug > 9:
                                     print pbuf
-                                # Update the lastrow record, for next time ...
+                                # Update the priorrow record, for next time ...
                                 tmpbuf = []
                                 for v in values:
                                     tmpbuf.insert(-0,v)
-                                lastrow[key] = tmpbuf
+                                priorrow[key] = tmpbuf
                         else:
                             firsttimestamp[table] = False
 
