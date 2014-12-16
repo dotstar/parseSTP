@@ -9,14 +9,14 @@
 # Then a series of sections describing the tables
 # <METRIC: ____>
 # Then a bunch of tables, seperated by timestamps
-# <TIMESTAMP: 20141107, 080003> 
-# <DATA: System> 
-# <END> 
-# <DATA: Devices, 8421> 
-# <END> 
-# <DATA: Devices TP Pool 1, 5954> 
-# <END> 
-# <DATA: Devices TP Pool 2, 5954> 
+# <TIMESTAMP: 20141107, 080003>
+# <DATA: System>
+# <END>
+# <DATA: Devices, 8421>
+# <END>
+# <DATA: Devices TP Pool 1, 5954>
+# <END>
+# <DATA: Devices TP Pool 2, 5954>
 
 # Top part of file describes the device and begins
 
@@ -191,8 +191,20 @@ def processHeaders(fp):
                     columns.insert(-0,columnName)
                 colNum += 1
             headers[tableName]=columns
-    # print headers
+    # Build header string in global variable, one for each table.
+
+
     return (headers,True)
+
+def myopen(name,mode):
+    if (m):
+        compressed = True
+        f = gzip.open(name, mode)
+    else:
+        compressed = False
+        f = open(name,mode)
+    return f
+
 ###
 ### MAIN
 ###
@@ -201,22 +213,19 @@ def processHeaders(fp):
 # True if the column is a Rate
 # Key is tableName_Column
 rateTable = dict()
+headers = {}
+
 debug = 45
 if __name__ == "__main__":
     tables = ("System", "Devices", "Devices TP Pool 1", "Devices TP Pool 2", "Devices TP Pool 3", "Devices TP Pool 4",
               "Devices TP Pool 5", "Devices TP Pool 6", "Directors FE", "Directors BE", "Directors RDF", "Ports FE",
               "Disks", "External Disks", "RDFAStats", "Rdf-System", "Rdf-Director", "Rdf-Device", "Rdf-Group",
               "Thin Pool Info", "Interconnect")
-    headers = {}
     for infile in glob('T1*'):
         print 'file is:',infile
         m = re.search('.*.gz$', infile)
-        if (m):
-            compressed = True
-            f = gzip.open(infile, 'r')
-        else:
-            compressed = False
-            f = open(infile, "r")
+
+        f = myopen(infile,"r")
 
         (headers,rc) = processHeaders(f)
         if not rc:
@@ -226,10 +235,8 @@ if __name__ == "__main__":
         # Now that we've determined which columns are in each table, re-open the file to process the data
         print "Rewinding file to process data elements."
         f.close()
-        if compressed:
-            f = gzip.open(infile, 'r')
-        else:
-            f = open(infile, "r")
+        f = myopen(infile,"r")
+
         lastrow = dict()                    # Used to calculate rates.
         firsttimestamp = dict()             # Can't calculate a rate on first time stamp ... (need two points)
         for table in tables:
@@ -249,19 +256,22 @@ if __name__ == "__main__":
                 # sys.stdout.flush()
                 # tables = ("Devices",)
                 for table in tables:
+
                     header = 'TimeStamp'
                     for h in (headers[table]):
-                        header += ',' + h  # Prepare a string for output
+                        header += ',' + h
                     header += '\n'
                     outfile = OpenFile(table, directory, header)
+
                     startRE = re.compile("^<DATA: " + table + ".*>")
                     stopRE = re.compile("^<END>")
                     dieRE = re.compile('xyzzy')
                     (firstline,tableText,rc) = getTable(f, startRE, stopRE, dieRE)
-                    mybuffer = tableText.getvalue().split("\n")
+                    mybuffer = tableText.getvalue().split("\n")     # Process one line at a time.
                     stop = re.compile(stopRE)
                     empty = re.compile("^$")
                     for line in mybuffer:
+                        line = line.rstrip()                        # remove CR NL and trailing blanks
                         values = line.split(",")
                         key = table+'_'+values[0]
                         # The last line will match the Regular Expression stopRE ...
@@ -272,24 +282,18 @@ if __name__ == "__main__":
                                 # print 'saving '+key+' for next pass '
                                 lastrow[key] = values  # Keep a copy for next time
                             else:
-                                # Adjust for Rates
                                 i = 0
-                                for oldvalue in (lastrow[key]):
-                                    # print 'oldvalue =',oldvalue
+                                for oldvalue in (lastrow[key]):     # adjust for rate variables
                                     if oldvalue != "" and oldvalue != " ":
                                         if isRate(table,i):
-                                            # print table,i,oldvalue,values[i],
                                             delta = long(float(values[i]) - float(oldvalue))
-                                            # print delta
                                             values[i] = delta
                                     i += 1
-                                # Output the record
                                 pbuf = t
                                 for v in values:
                                     pbuf = pbuf+','+str(v)
                                 pbuf += '\n'
-                                outfile.write(pbuf)
-                                debug = 0
+                                outfile.write(pbuf)                    # output the record
                                 if debug > 9:
                                     print pbuf
                                 # Update the lastrow record, for next time ...
