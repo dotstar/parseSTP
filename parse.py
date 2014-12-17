@@ -203,6 +203,7 @@ def processHeaders(fp):
                         setVal(rateTable,tableName,colNum,True)
                     else:
                         setVal(rateTable,tableName,colNum,False)
+                    setVal(headerTable,tableName,colNum,columnName)
                     columns.append(columnName)
                 colNum += 1
             headers[tableName]=columns
@@ -231,6 +232,7 @@ def myopen(name,mode):
 # Key is tableName_Column
 rateTable = {}
 typeTable={}
+headerTable = {}
 headers = {}
 debug = 5
 directory = os.getcwd()+'/'+'data'  # Output directory, mkdir if needed.
@@ -251,11 +253,13 @@ if __name__ == "__main__":
             exit('processHeaders failed')
         print "Rewinding file to process data elements."
         f.close()
-        print 'rates:'
-        printDB(rateTable)
-        print 'types:'
-        printDB(typeTable)
-        exit()
+        if debug > 29:
+            print 'rates:'
+            printDB(rateTable)
+            print 'types:'
+            printDB(typeTable)
+            print 'headers:'
+            printDB(headerTable)
         f = myopen(infile,"r")
         priorrow = dict()                   # Used to calculate rates.
         firsttimestamp = dict()             # Can't calculate a rate on first time stamp ... (need two points)
@@ -271,9 +275,15 @@ if __name__ == "__main__":
                 print "time is: ", t
                 for table in tables:
                     header = 'TimeStamp'
-                    for h in (headers[table]):
+                    i = 0
+                    while True:
+                        h = getVal(headerTable,table,i)
+                        if h is None:
+                            break
                         header += ',' + h
+                        i += 1
                     header += '\n'
+                    print 'HEADER:',header
                     outfile = OpenFile(table, directory, header)
 
                     (firstline,tableText,rc) = getTable(f, "^<DATA:", "^<END", None)
