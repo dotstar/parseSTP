@@ -30,11 +30,17 @@ import time
 
 
 
-def getTable(stpfile, startRE, stopRE, dieRE):
+def getTable(stpfile, start, stop, never):
     # Find the top of the table
-    # returns a the lines in the STP file between startRE and endRE
+    # returns a the lines in the STP file between start and stop
     # returns "None" on EOF
-    # print 'getTable( ',startRE,stopRE,dieRE,')'
+    startRE = re.compile(start)
+    stopRE = re.compile(stop)
+    if never is None:
+        dieRE = re.compile('xyzzy123___!')   # Easier to search for the improbably than change the code right now.
+    else:
+        dieRE = re.compile(never)
+
     (patternfound,rc) = (skipTo(stpfile, startRE,dieRE))
     if rc:
         returnbuffer = io.StringIO()
@@ -123,26 +129,27 @@ def OpenFile(filename, directoryname, headers):
 
 def setRate(table,i,rateFlag):
     # Tag column i of table as a rate field
-    k = table+'_'+str(i)
-    rateTable[k] = rateFlag
+    # This is probably very un-pythonesque.
+    # if the table hasn't been seen before, create a row
+    maxrow = 1000
+    try:
+        rateTable[table][i] = rateFlag
+        rc = True
+    except KeyError:
+        row = [[None]]*maxrow
+        rateTable[table] = row
+        rateTable[table][i] = rateFlag
+        rc = True
+    return rc
 
 def isRate(table,i):
     # Given a table name and column
     # Returns True if this is
     #  rate column
-    k = table+'_'+str(i)
-    if debug > 59:
-        print 'in isRate, key is',k
-    if debug > 59:
-        print 'contents of rateTable (keys only):'
-        for key in rateTable.keys():
-            print key,rateTable[key]
-    try:
-        rc = rateTable[k]
-    except KeyError:
-        if debug > 5:
-            print 'KeyError in isRate, table:',table,'column:',i
-        rc = False
+    if not rateTable[table][i]:
+        rc = None
+    else:
+        rc = rateTable[table][i]
     return rc
 
 def CloseFile(f):
@@ -153,10 +160,7 @@ def processHeaders(fp):
     # Does it matter if the net effect is that the file will be in buffer cache for the 2nd pass ?
     print "Processing Headers and Metrics"
     while True:
-        startRE = re.compile('^<METRIC: ')
-        stopRE = re.compile("^<END>")
-        lastMetricRE = re.compile("^<TIMESTAMP: ")       # If we see a timestamp there are no more Metrics
-        (firstline,tableText,rc) = getTable(fp, startRE, stopRE, lastMetricRE)
+        (firstline,tableText,rc) = getTable(fp, '^<METRIC:', '^<END>', '^<TIMESTAMP: ')
         # if tableText is None or rc == False:
         if tableText is None:
             break                           # We either ran out of Metrics in the file or didn't see an END.
@@ -214,38 +218,32 @@ def myopen(name,mode):
 # Global table which tracks which variables are rates and need additional processing
 # True if the column is a Rate
 # Key is tableName_Column
-rateTable = dict()
+rateTable = {}
 headers = {}
+debug = 5
+directory = os.getcwd()+'/'+'data'  # Output directory, mkdir if needed.
+if not os.path.exists(directory):
+    os.makedirs(directory)          # Here to walk through the rest of the file and collect the data into tables ...
 
-debug = 9
 if __name__ == "__main__":
     tables = ("System", "Devices", "Devices TP Pool 1", "Devices TP Pool 2", "Devices TP Pool 3", "Devices TP Pool 4",
               "Devices TP Pool 5", "Devices TP Pool 6", "Directors FE", "Directors BE", "Directors RDF", "Ports FE",
               "Disks", "External Disks", "RDFAStats", "Rdf-System", "Rdf-Director", "Rdf-Device", "Rdf-Group",
               "Thin Pool Info", "Interconnect")
     # tables = ("Devices TP Pool 1","Rdf-Group")
-    
+
     for infile in glob('T1*'):
-
         f = myopen(infile,"r")
-
         (headers,rc) = processHeaders(f)
         if not rc:
-            print 'processHeaders indicates failure'
-            exit()
-
-        # Now that we've determined which columns are in each table, re-open the file to process the data
+            exit('processHeaders failed')
         print "Rewinding file to process data elements."
         f.close()
         f = myopen(infile,"r")
-
-        priorrow = dict()                    # Used to calculate rates.
+        priorrow = dict()                   # Used to calculate rates.
         firsttimestamp = dict()             # Can't calculate a rate on first time stamp ... (need two points)
         for table in tables:
             firsttimestamp[table]=True      # Mark each table as fresh / never seen
-        directory = os.getcwd()+'/'+'data'  # Output directory, mkdir if needed.
-        if not os.path.exists(directory):
-            os.makedirs(directory)          # Here to walk through the rest of the file and collect the data into tables ...
         while True:
             ### Get all of the lines starting at the TIMESTAMP45 ...
             (ts,rc) = skipTo(f, re.compile("^<TIMESTAMP:.*>"),re.compile('xyzzy'))
@@ -254,29 +252,21 @@ if __name__ == "__main__":
             else:
                 t = str(tsDecode(ts))
                 print "time is: ", t
-                # sys.stdout.write(".")  # give the user a sense that we are working ...
-                # sys.stdout.flush()
-                # tables = ("Devices",)
                 for table in tables:
-
                     header = 'TimeStamp'
                     for h in (headers[table]):
                         header += ',' + h
                     header += '\n'
                     outfile = OpenFile(table, directory, header)
 
-                    startRE = re.compile("^<DATA: " + table + ".*>")
-                    stopRE = re.compile("^<END>")
-                    dieRE = re.compile('xyzzy')
-                    (firstline,tableText,rc) = getTable(f, startRE, stopRE, dieRE)
+                    (firstline,tableText,rc) = getTable(f, "^<DATA:", "^<END", None)
                     mybuffer = tableText.getvalue().split("\n")     # Process one line at a time.
-
+                    stopRE = re.compile('^<END')
                     emptyRE = re.compile("^$")
-
                     for line in mybuffer:
                         line = line.rstrip()                        # remove CR NL and trailing blanks
-                        values = line.split(",")
-                        pvalues = []
+                        values = line.split(",")                    # The values in the record (before rate adjustment)
+                        pvalues = []                                # The values to be output (after rate adjustment)
                         key = table+'_'+values[0]
                         # The last line will match the Regular Expression stopRE ...
                         # Add time stamp to each line.  Drop the last line.
@@ -294,7 +284,7 @@ if __name__ == "__main__":
                                         for k in priorrow[key]:
                                             print k,
                                         print '\n'
-                                    if oldvalue != "" and oldvalue != " ":
+                                    if (oldvalue != '') and (oldvalue != " "):
                                         if debug > 10:
                                             print 'calling inRate,key:',key,'table:',table,'column:',i
                                         if isRate(table,i):
