@@ -127,30 +127,39 @@ def OpenFile(filename, directoryname, headers):
         f = open(fullyQualifiedName, 'a')
     return f
 
-def setRate(table,i,rateFlag):
+def setVal(trackingvar,table,i,rateFlag):
     # Tag column i of table as a rate field
     # This is probably very un-pythonesque.
     # if the table hasn't been seen before, create a row
-    maxrow = 1000
+    maxrow = 150
     try:
-        rateTable[table][i] = rateFlag
+        trackingvar[table][i] = rateFlag
         rc = True
     except KeyError:
-        row = [[None]]*maxrow
-        rateTable[table] = row
-        rateTable[table][i] = rateFlag
+        row = [None]*maxrow
+        trackingvar[table] = row
+        trackingvar[table][i] = rateFlag
         rc = True
     return rc
 
-def isRate(table,i):
+def getVal(trackingvar,table,i):
     # Given a table name and column
     # Returns True if this is
     #  rate column
-    if not rateTable[table][i]:
+    if not trackingvar[table][i]:
         rc = None
     else:
-        rc = rateTable[table][i]
+        rc = trackingvar[table][i]
     return rc
+
+def printDB(trackingvar):
+    for key in trackingvar:
+        print key,
+        i = 0
+        while trackingvar[key][i] is not None:
+            print trackingvar[key][i],
+            i+= 1
+        print
 
 def CloseFile(f):
     f.close()
@@ -185,13 +194,15 @@ def processHeaders(fp):
                 if line != '':
                     linevalues = line.split(',')
                     columnName = linevalues[0]
+                    columnType = linevalues[1]
+                    setVal(typeTable,tableName,colNum,columnType)
                     columnaction = linevalues[2]
                     if columnaction == "Derived":
-                        setRate(tableName,colNum,False)
+                        setVal(rateTable,tableName,colNum,False)
                     elif columnaction == "ConvertToRate":
-                        setRate(tableName,colNum,True)
+                        setVal(rateTable,tableName,colNum,True)
                     else:
-                        setRate(tableName,colNum,False)
+                        setVal(rateTable,tableName,colNum,False)
                     columns.append(columnName)
                 colNum += 1
             headers[tableName]=columns
@@ -219,6 +230,7 @@ def myopen(name,mode):
 # True if the column is a Rate
 # Key is tableName_Column
 rateTable = {}
+typeTable={}
 headers = {}
 debug = 5
 directory = os.getcwd()+'/'+'data'  # Output directory, mkdir if needed.
@@ -239,6 +251,11 @@ if __name__ == "__main__":
             exit('processHeaders failed')
         print "Rewinding file to process data elements."
         f.close()
+        print 'rates:'
+        printDB(rateTable)
+        print 'types:'
+        printDB(typeTable)
+        exit()
         f = myopen(infile,"r")
         priorrow = dict()                   # Used to calculate rates.
         firsttimestamp = dict()             # Can't calculate a rate on first time stamp ... (need two points)
@@ -265,6 +282,8 @@ if __name__ == "__main__":
                     emptyRE = re.compile("^$")
                     for line in mybuffer:
                         line = line.rstrip()                        # remove CR NL and trailing blanks
+                        line=re.sub(r'\s+$','',line)
+                        line=re.sub(r',$','',line)
                         values = line.split(",")                    # The values in the record (before rate adjustment)
                         pvalues = []                                # The values to be output (after rate adjustment)
                         key = table+'_'+values[0]
@@ -277,7 +296,9 @@ if __name__ == "__main__":
                                 priorrow[key] = values  # Keep a copy for next time
                             else:
                                 i = 0
-                                for oldvalue in (priorrow[key]):     # adjust for rate variables
+                                for val in values:
+                                    newvalue = val
+                                    oldvalue = priorrow[key][i]
                                     if debug > 19:
                                         print 'prior row has ',len(priorrow[key]),'columns'
                                         print 'table:',table,'i:',i,'keys: ',
@@ -287,11 +308,14 @@ if __name__ == "__main__":
                                     if (oldvalue != '') and (oldvalue != " "):
                                         if debug > 10:
                                             print 'calling inRate,key:',key,'table:',table,'column:',i
-                                        if isRate(table,i):
-                                            delta = long(float(values[i]) - float(oldvalue))
-                                            pvalues.append(delta)
+                                        if getVal(rateTable,table,i):
+                                            try:
+                                                delta = long(float(newvalue) - float(oldvalue))
+                                                pvalues.append(delta)
+                                            except ValueError:
+                                                print 'ValueError, table:',table,'key:',key,'newValue:',values[i],'oldvalue:',oldvalue
                                         else:
-                                            pvalues.append(values[i])
+                                            pvalues.append(newvalue)
                                     i += 1
                                 pbuf = t
                                 for v in pvalues:
