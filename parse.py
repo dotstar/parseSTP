@@ -131,7 +131,6 @@ def setVal(trackingvar,table,i,rateFlag):
     # Tag column i of table as a rate field
     # This is probably very un-pythonesque.
     # if the table hasn't been seen before, create a row
-    maxrow = 150
     try:
         trackingvar[table][i] = rateFlag
         rc = True
@@ -235,6 +234,8 @@ typeTable={}
 headerTable = {}
 headers = {}
 debug = 5
+maxrow = 150
+
 directory = os.getcwd()+'/'+'data'  # Output directory, mkdir if needed.
 if not os.path.exists(directory):
     os.makedirs(directory)          # Here to walk through the rest of the file and collect the data into tables ...
@@ -283,7 +284,6 @@ if __name__ == "__main__":
                         header += ',' + h
                         i += 1
                     header += '\n'
-                    print 'HEADER:',header
                     outfile = OpenFile(table, directory, header)
 
                     (firstline,tableText,rc) = getTable(f, "^<DATA:", "^<END", None)
@@ -335,10 +335,14 @@ if __name__ == "__main__":
                                 if debug > 9:
                                     print pbuf
                                 # Update the priorrow record, for next time ...
-                                tmpbuf = []
-                                for v in values:
-                                    tmpbuf.insert(-0,v)
-                                priorrow[key] = tmpbuf
+                                priorrow[key] = [None]*maxrow
+                                j = 0
+                                try:
+                                    for v in values:
+                                        priorrow[key][j] = v
+                                        j += 1
+                                except IndexError:
+                                    pass
                         else:
                             firsttimestamp[table] = False
 
