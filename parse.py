@@ -235,6 +235,8 @@ headerTable = {}
 headers = {}
 debug = 5
 maxrow = 150
+lastt = 0
+deltat = 0
 
 directory = os.getcwd() + '/' + 'data'  # Output directory, mkdir if needed.
 if not os.path.exists(directory):
@@ -267,6 +269,9 @@ if __name__ == "__main__":
             else:
                 t = str(tsDecode(ts))
                 print "time is: ", t
+                if lastt > 0:
+                    deltat = long(t) - long(lastt)
+                    print 'elapsed time is',deltat,'seconds'
                 while True:  # collect tables until we see another timestamp
                     (linebuffer, tableText, rc) = gettable(f, "^<DATA:", "^<END", "^<TIMESTAMP: ")
                     if rc == False:
@@ -321,9 +326,9 @@ if __name__ == "__main__":
                                         if getVal(rateTable, table, i):
                                             type = getVal(typeTable,table,i)
                                             if type != 'float':
-                                                delta = long(newvalue) - long(oldvalue)
+                                                delta = (long(newvalue) - long(oldvalue))/long(deltat)
                                             else:
-                                                delta = long(float(newvalue) - float(oldvalue))
+                                                delta = (long(float(newvalue) - float(oldvalue)))/float(deltat)
 
                                             pvalues.append(delta)
                                         else:
@@ -344,6 +349,7 @@ if __name__ == "__main__":
                                     j += 1
                         else:
                             firstsample[table] = False
+                            lastt = t
 
                     CloseFile(outfile)
         CloseFile(f)
