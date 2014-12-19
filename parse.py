@@ -253,7 +253,7 @@ if __name__ == "__main__":
             exit('processHeaders failed')
         print "Rewinding file to process data elements."
         f.close()
-        if debug > 29:
+        if debug > 2:
             print 'rates:'
             printDB(rateTable)
             print 'types:'
