@@ -233,7 +233,7 @@ rateTable = {}
 typeTable = {}
 headerTable = {}
 headers = {}
-debug = 5
+debug = 0
 maxrow = 150
 lastt = 0
 deltat = 0
@@ -311,7 +311,8 @@ if __name__ == "__main__":
                             if firstsample.get(table) is None:
                                 # store all of the columns so we can process rates on the next pass
                                 # print 'saving '+key+' for next pass '
-                                print 'first time for table:',table,'key instance:',values[0]
+                                if debug > 5:
+                                    print 'first time for table:',table,'key instance:',values[0]
                                 priorrow[key] = [None] * maxrow
                                 j = 0
                                 for v in values:
