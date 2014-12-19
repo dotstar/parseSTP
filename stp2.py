@@ -32,14 +32,14 @@ def gettable(stpfile, start, stop, never):
     # Find the top of the table
     # returns a the lines in the STP file between start and stop
     # returns "None" on EOF
-    startmatch = re.compile(start)
-    stopmatch = re.compile(stop)
+    startre = re.compile(start)
+    stopRE = re.compile(stop)
     if never is None:
-        diematch = re.compile('xyzzy123___!')  # Easier to search for the improbably than change the code right now.
+        diere = re.compile('xyzzy123___!')  # Easier to search for the improbably than change the code right now.
     else:
-        diematch = re.compile(never)
+        diere = re.compile(never)
 
-    (patternfound, rc) = (skipTo(stpfile, startmatch, diematch))
+    (patternfound, rc) = (skipTo(stpfile, startre, diere))
     if rc:
         returnbuffer = io.StringIO()
         rc = False
@@ -47,11 +47,12 @@ def gettable(stpfile, start, stop, never):
             # Process to the bottom of the table ...
             for stpbuffer in stpfile:
 
-                if stopmatch.match(stpbuffer):
+                if stopRE.match(stpbuffer):
                     # print 'found the terminating regExp'
                     rc = True
                     break
-                elif diematch.match(stpbuffer):
+                elif diere.match(stpbuffer):
+                    print 'found beginning of data section ... die'
                     rc = False
                     break
                 elif stpbuffer is None:
@@ -66,6 +67,7 @@ def gettable(stpfile, start, stop, never):
         patternfound = None
         returnbuffer = None
         rc = False
+    # print(returnbuffer)
     return patternfound, returnbuffer, rc
 
 
@@ -150,7 +152,7 @@ def getVal(trackingvar, table, i):
     return rc
 
 
-def printdb(trackingvar):
+def printDB(trackingvar):
     for key in trackingvar:
         print key,
         i = 0
@@ -211,7 +213,6 @@ def processHeaders(fp):
 
     return headers, True
 
-
 def myopen(name, mode):
     print 'file is:', name
     m = re.search('.*.gz$', infile)
@@ -235,14 +236,17 @@ headerTable = {}
 headers = {}
 debug = 5
 maxrow = 150
-lastt = 0
-deltat = 0
 
 directory = os.getcwd() + '/' + 'data'  # Output directory, mkdir if needed.
 if not os.path.exists(directory):
     os.makedirs(directory)  # Here to walk through the rest of the file and collect the data into tables ...
 
 if __name__ == "__main__":
+    tables = ("System", "Devices", "Devices TP Pool 1", "Devices TP Pool 2", "Devices TP Pool 3", "Devices TP Pool 4",
+              "Devices TP Pool 5", "Devices TP Pool 6", "Directors FE", "Directors BE", "Directors RDF", "Ports FE",
+              "Disks", "External Disks", "RDFAStats", "Rdf-System", "Rdf-Director", "Rdf-Device", "Rdf-Group",
+              "Thin Pool Info", "Interconnect")
+
     for infile in glob('T1*'):
         f = myopen(infile, "r")
         (headers, rc) = processHeaders(f)
@@ -250,41 +254,27 @@ if __name__ == "__main__":
             exit('processHeaders failed')
         print "Rewinding file to process data elements."
         f.close()
-        if debug > 2:
+        if debug > 29:
             print 'rates:'
-            printdb(rateTable)
+            printDB(rateTable)
             print 'types:'
-            printdb(typeTable)
+            printDB(typeTable)
             print 'headers:'
-            printdb(headerTable)
+            printDB(headerTable)
         f = myopen(infile, "r")
         priorrow = dict()  # Used to calculate rates.
-        firstsample = dict()  # Can't calculate a rate on first time stamp ... (need two points)
+        firsttimestamp = dict()  # Can't calculate a rate on first time stamp ... (need two points)
+        for table in tables:
+            firsttimestamp[table] = True  # Mark each table as fresh / never seen
         while True:
-            # The first time in we need to find the 1st TIMESTAMP
-            # After that we may already have a TIMESTAMP in linebuffer
+            # Get all of the lines starting at the TIMESTAMP45 ...
             (ts, rc) = skipTo(f, re.compile("^<TIMESTAMP:.*>"), re.compile('xyzzy'))
             if not ts:  # When we're out of TIMESTAMPS, we are out of data.  File is complete.
                 break
             else:
                 t = str(tsDecode(ts))
                 print "time is: ", t
-                if lastt > 0:
-                    deltat = long(t) - long(lastt)
-                    print 'elapsed time is',deltat,'seconds'
-                while True:  # collect tables until we see another timestamp
-                    (linebuffer, tableText, rc) = gettable(f, "^<DATA:", "^<END", "^<TIMESTAMP: ")
-                    if rc == False:
-                        break   # end while
-                    # Samples of what the linebuffer looks like:  need to parse out the variable name
-                    # <DATA: System>
-                    # <DATA: Devices, 11059>
-                    # <DATA: Devices TP Pool 1, 7606>
-                    table = re.sub('^<DATA: ','',linebuffer)
-                    table = re.sub('>.*','',table)
-                    table = re.sub(',.*','',table)
-                    table = table.rstrip()
-                    print 'processing table:', table
+                for table in tables:
                     header = 'TimeStamp'
                     i = 0
                     while True:
@@ -295,11 +285,16 @@ if __name__ == "__main__":
                         i += 1
                     header += '\n'
                     outfile = OpenFile(table, directory, header)
+
+                    (firstline, tableText, rc) = gettable(f, "^<DATA:"+table, "^<END", None)
+                    if not rc:
+                        print "couldn't match table:",table,"  Quitting,"
+                        exit()
                     mybuffer = tableText.getvalue().split("\n")  # Process one line at a time.
                     stopRE = re.compile('^<END')
                     emptyRE = re.compile("^$")
                     for line in mybuffer:
-                        line = line.rstrip()  # remove CR NL and trailing blanks
+                        # line = line.rstrip()  # remove CR NL and trailing blanks
                         line = re.sub(r'\s+$', '', line)
                         line = re.sub(r',$', '', line)
                         values = line.split(",")  # The values in the record (before rate adjustment)
@@ -308,29 +303,41 @@ if __name__ == "__main__":
                         # The last line will match the Regular Expression stopRE ...
                         # Add time stamp to each line.  Drop the last line.
                         if not stopRE.match(line) and not emptyRE.match(line):
-                            if firstsample.get(table) is None:
+                            if firsttimestamp[table]:
                                 # store all of the columns so we can process rates on the next pass
                                 # print 'saving '+key+' for next pass '
-                                print 'first time for table:',table,'key instance:',values[0]
-                                priorrow[key] = [None] * maxrow
+                                priorrow[key] = [None]*maxrow
                                 j = 0
-                                for v in values:
-                                    priorrow[key][j] = v
-                                    j += 1
+                                try:
+                                    for v in values:
+                                        priorrow[key][j] = v
+                                        j += 1
+                                except IndexError:
+                                    print "why can't I copy to prior row?"
+                                    pass
                             else:
                                 i = 0
                                 for val in values:
                                     newvalue = val
                                     oldvalue = priorrow[key][i]
+                                    if debug > 19:
+                                        print 'prior row has ', len(priorrow[key]), 'columns'
+                                        print 'table:', table, 'i:', i, 'keys: ',
+                                        for k in priorrow[key]:
+                                            print k,
+                                        print '\n'
                                     if (oldvalue != '') and (oldvalue != " "):
+                                        if debug > 10:
+                                            print 'calling inRate,key:', key, 'table:', table, 'column:', i
                                         if getVal(rateTable, table, i):
-                                            type = getVal(typeTable,table,i)
-                                            if type != 'float':
-                                                delta = (long(newvalue) - long(oldvalue))/long(deltat)
-                                            else:
-                                                delta = (long(float(newvalue) - float(oldvalue)))/float(deltat)
-
-                                            pvalues.append(delta)
+                                            try:
+                                                delta = long(float(newvalue) - float(oldvalue))
+                                                pvalues.append(delta)
+                                            except ValueError:
+                                                print 'line:',line
+                                                print 'ValueError, column:',i,'table:', table, 'key:', key, 'newValue:', values[
+                                                    i], 'oldvalue:', oldvalue
+                                                print 'rateTable',getVal(rateTable,table,i)
                                         else:
                                             pvalues.append(newvalue)
                                     i += 1
@@ -344,12 +351,14 @@ if __name__ == "__main__":
                                 # Update the priorrow record, for next time ...
                                 priorrow[key] = [None] * maxrow
                                 j = 0
-                                for v in values:
-                                    priorrow[key][j] = v
-                                    j += 1
+                                try:
+                                    for v in values:
+                                        priorrow[key][j] = v
+                                        j += 1
+                                except IndexError:
+                                    pass
                         else:
-                            firstsample[table] = False
-                            lastt = t
+                            firsttimestamp[table] = False
 
                     CloseFile(outfile)
         CloseFile(f)
