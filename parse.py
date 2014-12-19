@@ -88,7 +88,7 @@ def skipTo(stpfile, firstRE, dieRE):
         fileptr = stpfile.tell()   # Where are we before the read?
         stpline = stpfile.readline()
         if stpline == '':
-            break          # EOF?
+            return ('',False)          # EOF?
         i += 1
         if firstRE.match(stpline):
             if debug > 19:
