@@ -67,7 +67,7 @@ def gettable(stpfile, start, stop, never):
                     returnbuffer.write(unicode(stpbuffer))
         else:
             returnbuffer = None
-            patternfound = stpbuffer
+            patternfound = ''
             rc = False
     else:
         patternfound = None
@@ -75,33 +75,29 @@ def gettable(stpfile, start, stop, never):
         rc = False
     return patternfound, returnbuffer, rc
 
-
 def skipTo(stpfile, firstRE, dieRE):
     # Look forward into the file
     # searching for RE or dieRE
     # return rc = True if matching RE
     # return rc = False if matching dieRE
-    stpline = ''
     found = False
     i = 0
     while not found:
         fileptr = stpfile.tell()   # Where are we before the read?
         stpline = stpfile.readline()
         if stpline == '':
-            return ('',False)          # EOF?
+            return '',False  # EOF?
         i += 1
         if firstRE.match(stpline):
             if debug > 19:
                 print 'matched firstRE',stpline            # print 'skipped',i,'lines'
-            return (stpline, True)
+            return stpline, True
         elif dieRE.match(stpline):
             if debug > 19:
                 print 'matched dieRE',stpline
             stpfile.seek(fileptr)   # roll the file back
             print 'skipped',i,'lines'
-            return (stpline, False)
-
-
+            return stpline, False
 
 def tsDecode(ts):
     # Input - a time stamp from STP formated like: <TIMESTAMP: 20141107, 080003>
@@ -118,22 +114,6 @@ def tsDecode(ts):
     # print ts, year, month, day, hour, minute, second
     retval = int(time.mktime(t))
     return retval
-
-
-def OpenFile(filename, directoryname, headers):
-    # Convenience routine
-    # Check to see if the file exists.  If not, create it and place headers
-    # else open for append
-    fullyQualifiedName = directoryname + '/' + filename
-
-    if not os.path.isfile(fullyQualifiedName):
-        # Here when the file doesn't already exist
-        f = open(fullyQualifiedName, 'a')
-        f.write(headers)
-    else:
-        f = open(fullyQualifiedName, 'a')
-    return f
-
 
 def setVal(trackingvar, table, i, rateFlag):
     # Tag column i of table as a rate field
@@ -162,6 +142,7 @@ def getVal(trackingvar, table, i):
 
 
 def printdb(trackingvar):
+    # Convenience routine for debugging
     for key in trackingvar:
         print key,
         i = 0
@@ -170,9 +151,6 @@ def printdb(trackingvar):
             i += 1
         print
 
-
-def CloseFile(f):
-    f.close()
 
 
 def processHeaders(fp):
@@ -223,7 +201,22 @@ def processHeaders(fp):
     return headers, True
 
 
-def myopen(name, mode):
+def OpenOutputFile(filename, directoryname, headers):
+    # Convenience routine
+    # Check to see if the file exists.  If not, create it and place headers
+    # else open for append
+    fullyQualifiedName = directoryname + '/' + filename
+
+    if not os.path.isfile(fullyQualifiedName):
+        # Here when the file doesn't already exist
+        f = open(fullyQualifiedName, 'a')
+        f.write(headers)
+    else:
+        f = open(fullyQualifiedName, 'a')
+    return f
+
+
+def OpenInputFile(name, mode):
     print 'file is:', name
     m = re.search('.*.gz$', infile)
     if m:
@@ -231,6 +224,10 @@ def myopen(name, mode):
     else:
         f = open(name, mode)
     return f
+
+
+def CloseFile(f):
+    f.close()
 
 
 #
@@ -255,7 +252,7 @@ if not os.path.exists(directory):
 
 if __name__ == "__main__":
     for infile in glob('T1*'):
-        f = myopen(infile, "r")
+        f = OpenInputFile(infile, "r")
         (headers, rc) = processHeaders(f)
         if not rc:
             exit('processHeaders failed')
@@ -268,7 +265,7 @@ if __name__ == "__main__":
             printdb(typeTable)
             print 'headers:'
             printdb(headerTable)
-        f = myopen(infile, "r")
+        f = OpenInputFile(infile, "r")
         linebuffer = ""
         priorrow = dict()  # Used to calculate rates.
         firstsample = dict()  # Can't calculate a rate on first time stamp ... (need two points)
@@ -289,7 +286,7 @@ if __name__ == "__main__":
                     print 'elapsed time is',deltat,'seconds'
                 while True:  # collect tables until we see another timestamp
                     (linebuffer, tableText, rc) = gettable(f, "^<DATA:", "^<END", "^<TIMESTAMP: ")
-                    if rc == False:
+                    if not rc:
                         break   # end while
                     # Samples of what the linebuffer looks like:  need to parse out the variable name
                     # <DATA: System>
@@ -311,7 +308,7 @@ if __name__ == "__main__":
                         header += ',' + h
                         i += 1
                     header += '\n'
-                    outfile = OpenFile(table, directory, header)
+                    outfile = OpenOutputFile(table, directory, header)
                     mybuffer = tableText.getvalue().split("\n")  # Process one line at a time.
                     stopRE = re.compile('^<END')
                     emptyRE = re.compile("^$")
