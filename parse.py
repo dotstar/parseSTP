@@ -47,7 +47,11 @@ def gettable(stpfile, start, stop, never):
             print 'patternfound:',patternfound
         if patternfound is not None:
             # Process to the bottom of the table ...
-            for stpbuffer in stpfile:
+            # for stpbuffer in stpfile:
+            while True:
+                stpbuffer = stpfile.readline()
+                if stpbuffer == '':
+                    break
 
                 if stopmatch.match(stpbuffer):
                     # print 'found the terminating regExp'
@@ -83,15 +87,18 @@ def skipTo(stpfile, firstRE, dieRE):
     while not found:
         fileptr = stpfile.tell()   # Where are we before the read?
         stpline = stpfile.readline()
+        if stpline == '':
+            break          # EOF?
         i += 1
         if firstRE.match(stpline):
-            # print 'skipped',i,'lines'
+            if debug > 19:
+                print 'matched firstRE',stpline            # print 'skipped',i,'lines'
             return (stpline, True)
         elif dieRE.match(stpline):
             if debug > 19:
                 print 'matched dieRE',stpline
             stpfile.seek(fileptr)   # roll the file back
-            # print 'skipped',i,'lines'
+            print 'skipped',i,'lines'
             return (stpline, False)
 
 
