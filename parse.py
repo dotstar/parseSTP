@@ -30,19 +30,21 @@ import time
 
 def gettable(stpfile, start, stop, never):
     # Find the top of the table
-    # returns a the lines in the STP file between start and stop
+    # returns the lines from the STP file between start and stop
     # returns "None" on EOF
+
+    if never is None:
+        never = 'xyzzy123____5551212'
     startmatch = re.compile(start)
     stopmatch = re.compile(stop)
-    if never is None:
-        diematch = re.compile('xyzzy123___!')  # Easier to search for the improbably than change the code right now.
-    else:
-        diematch = re.compile(never)
+    diematch = re.compile(never)
 
     (patternfound, rc) = (skipTo(stpfile, startmatch, diematch))
     if rc:
         returnbuffer = io.StringIO()
         rc = False
+        if debug > 14:
+            print 'patternfound:',patternfound
         if patternfound is not None:
             # Process to the bottom of the table ...
             for stpbuffer in stpfile:
@@ -52,6 +54,7 @@ def gettable(stpfile, start, stop, never):
                     rc = True
                     break
                 elif diematch.match(stpbuffer):
+                    returnbuffer = stpbuffer
                     rc = False
                     break
                 elif stpbuffer is None:
@@ -60,7 +63,7 @@ def gettable(stpfile, start, stop, never):
                     returnbuffer.write(unicode(stpbuffer))
         else:
             returnbuffer = None
-            patternfound = None
+            patternfound = stpbuffer
             rc = False
     else:
         patternfound = None
@@ -74,22 +77,23 @@ def skipTo(stpfile, firstRE, dieRE):
     # searching for RE or dieRE
     # return rc = True if matching RE
     # return rc = False if matching dieRE
-
-    patternfound = False
     stpline = ''
-
-    for stpline in stpfile:
+    found = False
+    i = 0
+    while not found:
+        fileptr = stpfile.tell()   # Where are we before the read?
+        stpline = stpfile.readline()
+        i += 1
         if firstRE.match(stpline):
-            patternfound = True
-            break
+            # print 'skipped',i,'lines'
+            return (stpline, True)
         elif dieRE.match(stpline):
-            patternfound = False
-            break
+            if debug > 19:
+                print 'matched dieRE',stpline
+            stpfile.seek(fileptr)   # roll the file back
+            # print 'skipped',i,'lines'
+            return (stpline, False)
 
-    if patternfound:
-        return stpline, True
-    else:
-        return None, False
 
 
 def tsDecode(ts):
@@ -258,17 +262,21 @@ if __name__ == "__main__":
             print 'headers:'
             printdb(headerTable)
         f = myopen(infile, "r")
+        linebuffer = ""
         priorrow = dict()  # Used to calculate rates.
         firstsample = dict()  # Can't calculate a rate on first time stamp ... (need two points)
         while True:
             # The first time in we need to find the 1st TIMESTAMP
             # After that we may already have a TIMESTAMP in linebuffer
-            (ts, rc) = skipTo(f, re.compile("^<TIMESTAMP:.*>"), re.compile('xyzzy'))
+            if linebuffer and re.match("^<TIMESTAMP:",linebuffer):
+                ts = linebuffer
+            else:
+                (ts, rc) = skipTo(f, re.compile("^<TIMESTAMP:.*>"), re.compile('xyzzy'))
             if not ts:  # When we're out of TIMESTAMPS, we are out of data.  File is complete.
                 break
             else:
                 t = str(tsDecode(ts))
-                print "time is: ", t
+                print "time is: ", t,ts
                 if lastt > 0:
                     deltat = long(t) - long(lastt)
                     print 'elapsed time is',deltat,'seconds'
@@ -280,11 +288,13 @@ if __name__ == "__main__":
                     # <DATA: System>
                     # <DATA: Devices, 11059>
                     # <DATA: Devices TP Pool 1, 7606>
-                    table = re.sub('^<DATA: ','',linebuffer)
+                    table = linebuffer
+                    table = re.sub('^<DATA: ','',table)
                     table = re.sub('>.*','',table)
                     table = re.sub(',.*','',table)
                     table = table.rstrip()
-                    print 'processing table:', table
+                    if debug > 3 :
+                        print 'processing table:', table
                     header = 'TimeStamp'
                     i = 0
                     while True:
