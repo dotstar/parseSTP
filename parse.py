@@ -22,9 +22,10 @@
 
 import os
 import gzip
-from glob import glob
+from glob import iglob
 import io
 import re
+import numpy
 import time
 
 
@@ -251,7 +252,12 @@ if not os.path.exists(directory):
     os.makedirs(directory)  # Here to walk through the rest of the file and collect the data into tables ...
 
 if __name__ == "__main__":
-    for infile in glob('T1*'):
+    # Build a sorted list of filenames
+    inputDirectory = './'
+    inputFiles = inputDirectory + 'T1*'
+    ifile = iglob(inputFiles)
+    for infile in sorted(ifile):
+        print "file:",infile
         f = OpenInputFile(infile, "r")
         (headers, rc) = processHeaders(f)
         if not rc:
@@ -283,6 +289,8 @@ if __name__ == "__main__":
                 print "time is: ", t,ts
                 if lastt > 0:
                     deltat = long(t) - long(lastt)
+                    if ( deltat < 0):
+                        deltat = - deltat
                     print 'elapsed time is',deltat,'seconds'
                 while True:  # collect tables until we see another timestamp
                     (linebuffer, tableText, rc) = gettable(f, "^<DATA:", "^<END", "^<TIMESTAMP: ")
@@ -341,7 +349,13 @@ if __name__ == "__main__":
                                         if getVal(rateTable, table, i):
                                             type = getVal(typeTable,table,i)
                                             if type != 'float':
-                                                delta = (long(newvalue) - long(oldvalue))/long(deltat)
+                                                try:
+                                                    delta = (numpy.uint64(newvalue) - numpy.uint64(oldvalue))/numpy.uint64(deltat)
+                                                except RuntimeWarning:
+                                                    print 'RuntimeWarning'
+                                                    print 'newvalue:',newvalue
+                                                    print 'oldvalue:',oldvalue
+                                                    print 'deltat:',deltat
                                             else:
                                                 delta = (long(float(newvalue) - float(oldvalue)))/float(deltat)
 
