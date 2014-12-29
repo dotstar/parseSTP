@@ -1,13 +1,30 @@
 <component name="ProjectDictionaryState">
   <dictionary name="cdd">
     <words>
+      <w>closefile</w>
+      <w>colnum</w>
       <w>columnaction</w>
+      <w>columnname</w>
+      <w>columntype</w>
       <w>ctime</w>
+      <w>deltat</w>
+      <w>diematch</w>
       <w>diere</w>
+      <w>dieregx</w>
       <w>directoryname</w>
+      <w>emptyre</w>
+      <w>filenames</w>
+      <w>fileptr</w>
       <w>firstline</w>
+      <w>firstregx</w>
+      <w>firstsample</w>
       <w>firsttimestamp</w>
       <w>formated</w>
+      <w>fullyqualifiedname</w>
+      <w>getcwd</w>
+      <w>headertable</w>
+      <w>ifile</w>
+      <w>lastt</w>
       <w>linebuffer</w>
       <w>linevalues</w>
       <w>maxrow</w>
@@ -16,22 +33,40 @@
       <w>myopen</w>
       <w>newvalue</w>
       <w>oldvalue</w>
+      <w>openinputfile</w>
+      <w>openoutputfile</w>
+      <w>outdir</w>
       <w>patternfound</w>
       <w>pbuf</w>
+      <w>printdb</w>
       <w>priorrow</w>
+      <w>processheaders</w>
       <w>pvalues</w>
       <w>pythonesque</w>
+      <w>rateflag</w>
+      <w>ratetable</w>
       <w>returnbuffer</w>
       <w>retval</w>
       <w>rstrip</w>
+      <w>sequencenum</w>
+      <w>skipto</w>
+      <w>startmatch</w>
       <w>startre</w>
+      <w>stopmatch</w>
+      <w>stopregx</w>
       <w>stpbuffer</w>
       <w>stpfile</w>
       <w>stpline</w>
       <w>symid</w>
       <w>symmetrix</w>
+      <w>tablename</w>
+      <w>tabletext</w>
       <w>trackingvar</w>
+      <w>tsdecode</w>
+      <w>typetable</w>
+      <w>uint</w>
       <w>vmax</w>
+      <w>vtype</w>
       <w>xyzzy</w>
     </words>
   </dictionary>

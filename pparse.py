@@ -25,21 +25,22 @@ import gzip
 from glob import iglob
 import io
 import re
-import numpy
+import numpy as np
 import multiprocessing as mp
 import time
 
-def parse(infile,outdir,sequencenum):
-    print 'infile:',infile
-    print 'outfile:',outdir
-    print 'sequencenum:',sequencenum
-    print "PID:",os.getpid()
+
+def parse(ifile, outdir, sequencenum):
+    print 'infile:', ifile
+    print 'outfile:', outdir
+    print 'sequencenum:', sequencenum
+    print "PID:", os.getpid()
 
     def gettable(stpfile, start, stop, never):
         # Find the top of the table
         # returns the lines from the STP file between start and stop
         # returns "None" on EOF
-        print 'gettable called: (',stpfile,",","start",",","stop",",",never,')'
+        print 'gettable called: (', stpfile, ",", "start", ",", "stop", ",", never, ')'
         debug = 0
         if never is None:
             never = 'xyzzy123____5551212'
@@ -47,12 +48,12 @@ def parse(infile,outdir,sequencenum):
         stopmatch = re.compile(stop)
         diematch = re.compile(never)
 
-        (patternfound, rc) = (skipTo(stpfile, startmatch, diematch))
+        (patternfound, rc) = (skipto(stpfile, startmatch, diematch))
         if rc:
             returnbuffer = io.StringIO()
             rc = False
             if debug > 14:
-                print 'patternfound:',patternfound
+                print 'patternfound:', patternfound
             if patternfound is not None:
                 # Process to the bottom of the table ...
                 # for stpbuffer in stpfile:
@@ -83,8 +84,8 @@ def parse(infile,outdir,sequencenum):
             rc = False
         return patternfound, returnbuffer, rc
 
-    def skipTo(stpfile, firstRE, dieRE):
-        print "skipto(",",",stpfile,",",'firstRE',",",dieRE,")"
+    def skipto(stpfile, firstregx, dieregx):
+        print "skipto(", ",", stpfile, ",", 'firstRE', ",", dieregx, ")"
         # Look forward into the file
         # searching for RE or dieRE
         # return rc = True if matching RE
@@ -93,23 +94,23 @@ def parse(infile,outdir,sequencenum):
         debug = 20
         i = 0
         while not found:
-            fileptr = stpfile.tell()   # Where are we before the read?
+            fileptr = stpfile.tell()  # Where are we before the read?
             stpline = stpfile.readline()
             if stpline == '':
-                return '',False  # EOF?
+                return '', False  # EOF?
             i += 1
-            if firstRE.match(stpline):
+            if firstregx.match(stpline):
                 if debug > 19:
-                    print 'matched firstRE',stpline            # print 'skipped',i,'lines'
+                    print 'matched firstRE', stpline  # print 'skipped',i,'lines'
                 return stpline, True
-            elif dieRE.match(stpline):
+            elif dieregx.match(stpline):
                 if debug > 19:
-                    print 'matched dieRE',stpline
-                stpfile.seek(fileptr)   # roll the file back
-                print 'skipped',i,'lines'
+                    print 'matched dieRE', stpline
+                stpfile.seek(fileptr)  # roll the file back
+                print 'skipped', i, 'lines'
                 return stpline, False
 
-    def tsDecode(ts):
+    def tsdecode(ts):
         # Input - a time stamp from STP formated like: <TIMESTAMP: 20141107, 080003>
         # Returns - ctime long integer
 
@@ -125,22 +126,21 @@ def parse(infile,outdir,sequencenum):
         retval = int(time.mktime(t))
         return retval
 
-    def setVal(trackingvar, table, i, rateFlag):
+    def setval(trackingvar, table, i, rateflag):
         # Tag column i of table as a rate field
         # This is probably very un-pythonesque.
         # if the table hasn't been seen before, create a row
         try:
-            trackingvar[table][i] = rateFlag
+            trackingvar[table][i] = rateflag
             rc = True
         except KeyError:
             row = [None] * maxrow
             trackingvar[table] = row
-            trackingvar[table][i] = rateFlag
+            trackingvar[table][i] = rateflag
             rc = True
         return rc
 
-
-    def getVal(trackingvar, table, i):
+    def getval(trackingvar, table, i):
         # Given a table name and column
         # Returns True if this is
         # rate column
@@ -149,7 +149,6 @@ def parse(infile,outdir,sequencenum):
         else:
             rc = trackingvar[table][i]
         return rc
-
 
     def printdb(trackingvar):
         # Convenience routine for debugging
@@ -161,30 +160,28 @@ def parse(infile,outdir,sequencenum):
                 i += 1
             print
 
-
-
-    def processHeaders(fp):
+    def processheaders(fp):
         # Is there a clean way to do this without reading the whole file ?
         # Does it matter if the net effect is that the file will be in buffer cache for the 2nd pass ?
         print "Processing Headers and Metrics"
         debug = 10
         while True:
-            (firstline, tableText, rc) = gettable(fp, '^<METRIC:', '^<END>', '^<TIMESTAMP: ')
-            # if tableText is None or rc == False:
-            if tableText is None:
+            (firstline, tabletext, rc) = gettable(fp, '^<METRIC:', '^<END>', '^<TIMESTAMP: ')
+            # if tabletext is None or rc == False:
+            if tabletext is None:
                 print 'out of metrics?'
                 break  # We either ran out of Metrics in the file or didn't see an END.
             else:
-                tableName = firstline[9:-3]
+                tablename = firstline[9:-3]
                 # For unknown reasons, 4 variables are named RDF-* in the metric section and Rdf-* in the Data section
                 # Patch around this for now.
-                if tableName[0:4] == 'RDF-':
-                    tableName = re.sub("RDF-", "Rdf-", tableName)
+                if tablename[0:4] == 'RDF-':
+                    tablename = re.sub("RDF-", "Rdf-", tablename)
                 if debug > 9:
-                    print "Metric Name: " + tableName
-                mybuffer = tableText.getvalue().split("\n")
+                    print "Metric Name: " + tablename
+                mybuffer = tabletext.getvalue().split("\n")
                 columns = []
-                colNum = 0
+                colnum = 0
                 for line in mybuffer:
                     # For each column there is a CSV with a name and some attributes.
                     # Similar to:
@@ -194,133 +191,127 @@ def parse(infile,outdir,sequencenum):
 
                     if line != '':
                         linevalues = line.split(',')
-                        columnName = linevalues[0]
-                        columnType = linevalues[1]
-                        setVal(typeTable, tableName, colNum, columnType)
+                        columnname = linevalues[0]
+                        columntype = linevalues[1]
+                        setval(typetable, tablename, colnum, columntype)
                         columnaction = linevalues[2]
                         if columnaction == "Derived":
-                            setVal(rateTable, tableName, colNum, False)
+                            setval(ratetable, tablename, colnum, False)
                         elif columnaction == "ConvertToRate":
-                            setVal(rateTable, tableName, colNum, True)
+                            setval(ratetable, tablename, colnum, True)
                         else:
-                            setVal(rateTable, tableName, colNum, False)
-                        setVal(headerTable, tableName, colNum, columnName)
-                        columns.append(columnName)
-                    colNum += 1
-                headers[tableName] = columns
+                            setval(ratetable, tablename, colnum, False)
+                        setval(headertable, tablename, colnum, columnname)
+                        columns.append(columnname)
+                    colnum += 1
+                headers[tablename] = columns
         # Build header string in global variable, one for each table.
 
         return headers, True
 
-
-    def OpenOutputFile(filename, directoryname, headers):
+    def openoutputfile(filename, directoryname, headers):
         # Convenience routine
         # Check to see if the file exists.  If not, create it and place headers
         # else open for append
-        fullyQualifiedName = directoryname + '/' + filename
+        fullyqualifiedname = directoryname + '/' + filename
 
-        if not os.path.isfile(fullyQualifiedName):
+        if not os.path.isfile(fullyqualifiedname):
             # Here when the file doesn't already exist
-            f = open(fullyQualifiedName, 'a')
-            f.write(headers)
+            f1 = open(fullyqualifiedname, 'a')
+            f1.write(headers)
         else:
-            f = open(fullyQualifiedName, 'a')
-        return f
+            f1 = open(fullyqualifiedname, 'a')
+        return f1
 
-
-    def OpenInputFile(name, mode):
+    def openinputfile(name, mode):
         # print 'file is:', name
         # print 'directory is:',os.getcwd()
         m = re.search('.*.gz$', name)
         if m:
-            f = gzip.open(name, mode)
+            f1 = gzip.open(name, mode)
         else:
-            f = open(name, mode)
-        return f
+            f1 = open(name, mode)
+        return f1
 
-
-    def CloseFile(f):
+    def closefile(f):
         f.close()
 
-
-
-    lastt = 0
-    deltat = 0
     # Global table which tracks which variables are rates and need additional processing
     # True if the column is a Rate
     # Key is tableName_Column
-    rateTable = {}
-    typeTable = {}
-    headerTable = {}
+    lastt = 0
+    deltat = 0
+    ratetable = {}
+    typetable = {}
+    headertable = {}
     headers = {}
-
 
     directory = os.getcwd() + '/' + 'data' + '/' + str(sequencenum)  # Output directory, mkdir if needed.
     if not os.path.exists(directory):
         os.makedirs(directory)  # Here to walk through the rest of the file and collect the data into tables ...
 
-    f = OpenInputFile(infile, "r")
-    (headers, rc) = processHeaders(f)
+    f = openinputfile(ifile, "r")
+    (headers, rc) = processheaders(f)
     if not rc:
         exit('processHeaders failed')
     print "Rewinding file to process data elements."
     f.close()
     if debug > 2:
         print 'rates:'
-        printdb(rateTable)
+        printdb(ratetable)
         print 'types:'
-        printdb(typeTable)
+        printdb(typetable)
         print 'headers:'
-        printdb(headerTable)
-    f = OpenInputFile(infile, "r")
+        printdb(headertable)
+    f = openinputfile(ifile, "r")
     linebuffer = ""
     priorrow = dict()  # Used to calculate rates.
     firstsample = dict()  # Can't calculate a rate on first time stamp ... (need two points)
     while True:
         # The first time in we need to find the 1st TIMESTAMP
         # After that we may already have a TIMESTAMP in linebuffer
-        if linebuffer and re.match("^<TIMESTAMP:",linebuffer):
+        if linebuffer and re.match("^<TIMESTAMP:", linebuffer):
             ts = linebuffer
         else:
-            (ts, rc) = skipTo(f, re.compile("^<TIMESTAMP:.*>"), re.compile('xyzzy'))
+            (ts, rc) = skipto(f, re.compile("^<TIMESTAMP:.*>"), re.compile('xyzzy'))
         if not ts:  # When we're out of TIMESTAMPS, we are out of data.  File is complete.
             break
         else:
-            t = str(tsDecode(ts))
-            print "time is: ", t,ts
+            t = str(tsdecode(ts))
+            print "time is: ", t, ts
             if lastt > 0:
                 deltat = long(t) - long(lastt)
-                if ( deltat < 0):
+                if deltat < 0:
                     deltat = - deltat
-                print 'elapsed time is',deltat,'seconds'
+                print 'elapsed time is', deltat, 'seconds'
             while True:  # collect tables until we see another timestamp
-                (linebuffer, tableText, rc) = gettable(f, "^<DATA:", "^<END", "^<TIMESTAMP: ")
+                (linebuffer, tabletext, rc) = gettable(f, "^<DATA:", "^<END", "^<TIMESTAMP: ")
                 if not rc:
-                    break   # end while
+                    break  # end while
                 # Samples of what the linebuffer looks like:  need to parse out the variable name
                 # <DATA: System>
                 # <DATA: Devices, 11059>
                 # <DATA: Devices TP Pool 1, 7606>
                 table = linebuffer
-                table = re.sub('^<DATA: ','',table)
-                table = re.sub('>.*','',table)
-                table = re.sub(',.*','',table)
+                table = re.sub('^<DATA: ', '', table)
+                table = re.sub('>.*', '', table)
+                table = re.sub(',.*', '', table)
                 table = table.rstrip()
-                if debug > 3 :
+                if debug > 3:
                     print 'processing table:', table
                 header = 'TimeStamp'
                 i = 0
                 while True:
-                    h = getVal(headerTable, table, i)
+                    h = getval(headertable, table, i)
                     if h is None:
                         break
                     header += ',' + h
                     i += 1
                 header += '\n'
-                outfile = OpenOutputFile(table, directory, header)
-                mybuffer = tableText.getvalue().split("\n")  # Process one line at a time.
-                stopRE = re.compile('^<END')
-                emptyRE = re.compile("^$")
+                outfile = openoutputfile(table, directory, header)
+                mybuffer = tabletext.getvalue().split("\n")  # Process one line at a time.
+                stopregx = re.compile('^<END')
+                emptyre = re.compile("^$")
                 for line in mybuffer:
                     line = line.rstrip()  # remove CR NL and trailing blanks
                     line = re.sub(r'\s+$', '', line)
@@ -330,12 +321,12 @@ def parse(infile,outdir,sequencenum):
                     key = table + '_' + values[0]
                     # The last line will match the Regular Expression stopRE ...
                     # Add time stamp to each line.  Drop the last line.
-                    if not stopRE.match(line) and not emptyRE.match(line):
+                    if not stopregx.match(line) and not emptyre.match(line):
                         if firstsample.get(table) is None:
                             # store all of the columns so we can process rates on the next pass
                             # print 'saving '+key+' for next pass '
                             if debug > 5:
-                                print 'first time for table:',table,'key instance:',values[0]
+                                print 'first time for table:', table, 'key instance:', values[0]
                             priorrow[key] = [None] * maxrow
                             j = 0
                             for v in values:
@@ -347,18 +338,28 @@ def parse(infile,outdir,sequencenum):
                                 newvalue = val
                                 oldvalue = priorrow[key][i]
                                 if (oldvalue != '') and (oldvalue != " "):
-                                    if getVal(rateTable, table, i):
-                                        type = getVal(typeTable,table,i)
-                                        if type != 'float':
+                                    if getval(ratetable, table, i):
+                                        vtype = getval(typetable, table, i)
+                                        if vtype != 'float':
                                             try:
-                                                delta = (numpy.uint64(newvalue) - numpy.uint64(oldvalue))/numpy.uint64(deltat)
+                                                if False:
+                                                    nv = newvalue
+                                                    nv = nv.astype(np.uint64)
+                                                    ov = oldvalue
+                                                    ov = ov.astype(np.uint64)
+                                                    dv = deltat
+                                                    dv = dv.astype(np.uint64)
+                                                    delta = (nv - ov) / dv
+                                                else:
+                                                    delta = (np.uint64(newvalue) - np.uint64(oldvalue)) / np.uint64(deltat)
                                             except RuntimeWarning:
                                                 print 'RuntimeWarning'
-                                                print 'newvalue:',newvalue
-                                                print 'oldvalue:',oldvalue
-                                                print 'deltat:',deltat
+                                                print 'newvalue:', newvalue
+                                                print 'oldvalue:', oldvalue
+                                                print 'deltat:', deltat
+                                                delta = 0  # xxx - is this the right thing to do on overflow ?
                                         else:
-                                            delta = (long(float(newvalue) - float(oldvalue)))/float(deltat)
+                                            delta = (long(float(newvalue) - float(oldvalue))) / float(deltat)
 
                                         pvalues.append(delta)
                                     else:
@@ -381,16 +382,12 @@ def parse(infile,outdir,sequencenum):
                         firstsample[table] = False
                         lastt = t
 
-                CloseFile(outfile)
-    CloseFile(f)
+                closefile(outfile)
+    closefile(f)
 
 #
 # MAIN
 #
-
-
-
-
 if __name__ == "__main__":
     debug = 0
     maxrow = 150
@@ -402,7 +399,7 @@ if __name__ == "__main__":
     pool = mp.Pool(processes=4)
     seq = os.getpid()
     for infile in sorted(ifile):
-        r = pool.apply_async(parse,args=(infile,'.',seq))
+        r = pool.apply_async(parse, args=(infile, '.', seq))
         results.append(r)
         seq += 1
         time.sleep(7)

@@ -52,28 +52,28 @@ devices$random.read.misses.per.sec <- NULL
 devices$seq.read.misses.per.sec <- NULL
 devices$random.write.misses.per.sec <- NULL
 devices$seq.write.misses.per.sec <- NULL
-devices$X.random.read.hit <- NULL
-devices$X.random.read.miss <- NULL
-devices$X.sequential.read <- NULL
-devices$X.write <- NULL
-devices$X.read <- NULL
-devices$X.hit <- NULL
-devices$X.miss <- NULL
-devices$X.read.hit <- NULL
-devices$X.write.hit <- NULL
-devices$X.read.miss <- NULL
-devices$X.write.miss <- NULL
-devices$X.sequential.io <- NULL
-devices$X.sequential.writes <- NULL
+devices$X..random.read.hit <- NULL
+devices$X..random.read.miss <- NULL
+devices$X..sequential.read <- NULL
+devices$X..write <- NULL
+devices$X..read <- NULL
+devices$X..hit <- NULL
+devices$X..miss <- NULL
+devices$X..read.hit <- NULL
+devices$X..write.hit <- NULL
+devices$X..read.miss <- NULL
+devices$X..write.miss <- NULL
+devices$X..sequential.io <- NULL
+devices$X..sequential.writes <- NULL
 devices$HA.Kbytes.transferred.per.sec <- NULL
 devices$average.read.size.in.Kbytes <- NULL
 devices$average.write.size.in.Kbytes <- NULL
 devices$average.io.size.in.Kbytes <- NULL
 devices$DA.Kbytes.transferred.per.sec <- NULL
-devices$X.read.hit.of.ios <- NULL
-devices$X.read.miss.of.ios <- NULL
-devices$X.write.hit.of.ios <- NULL
-devices$X.write.miss.of.ios <- NULL
+devices$X..read.hit.of.ios <- NULL
+devices$X..read.miss.of.ios <- NULL
+devices$X..write.hit.of.ios <- NULL
+devices$X..write.miss.of.ios <- NULL
 devices$device.capacity.in..MB. <- NULL
 
 devices$total.reads.per.sec <- devices$random.reads.per.sec + devices$seq.reads.per.sec
@@ -99,29 +99,29 @@ devices$random.read.misses.per.sec <- devices$random.reads.per.sec - devices$ran
 devices$seq.read.misses.per.sec <- devices$seq.reads.per.sec - devices$seq.read.hits.per.sec
 devices$random.write.misses.per.sec <- devices$random.writes.per.sec - devices$random.write.hits.per.sec
 devices$seq.write.misses.per.sec <- devices$seq.writes.per.sec - devices$seq.write.hits.per.sec
-devices$X.random.read.hit <- 100 * devices$random.read.hits.per.sec / devices$total.ios.per.sec
-devices$X.random.read.miss <- 100 * devices$random.read.misses.per.sec / devices$total.ios.per.sec
-devices$X.sequential.read <- 100 * devices$seq.reads.per.sec / devices$total.ios.per.sec
-devices$X.write <- 100 * (devices$total.writes.per.sec / devices$total.ios.per.sec)
-devices$X.read <- 100 * (devices$total.reads.per.sec / devices$total.ios.per.sec)
-devices$X.hit <- 100 * (devices$total.hits.per.sec / devices$total.ios.per.sec)
-devices$X.miss <- 100 - devices$X.hit
-devices$X.read.hit <- 100 * (devices$total.read.hits.per.sec / devices$total.reads.per.sec)
-devices$X.write.hit <- 100 * ((devices$random.write.hits.per.sec + devices$seq.write.hits.per.sec) / devices$total.writes.per.sec)
-devices$X.read.miss <- 100 * (devices$total.read.misses.per.sec / devices$total.reads.per.sec)
-devices$X.write.miss <- 100 * (devices$total.write.misses.per.sec / devices$total.writes.per.sec)
-devices$X.sequential.io <- 100 * (devices$total.seq.ios.per.sec / devices$total.ios.per.sec)
-devices$X.sequential.writes <- 100*(devices$seq.writes.per.sec / devices$total.ios.per.sec)
+devices$X..random.read.hit <- 100 * devices$random.read.hits.per.sec / devices$total.ios.per.sec
+devices$X..random.read.miss <- 100 * devices$random.read.misses.per.sec / devices$total.ios.per.sec
+devices$X..sequential.read <- 100 * devices$seq.reads.per.sec / devices$total.ios.per.sec
+devices$X..write <- 100 * (devices$total.writes.per.sec / devices$total.ios.per.sec)
+devices$X..read <- 100 * (devices$total.reads.per.sec / devices$total.ios.per.sec)
+devices$X..hit <- 100 * (devices$total.hits.per.sec / devices$total.ios.per.sec)
+devices$X..miss <- 100 - devices$X..hit
+devices$X..read.hit <- 100 * (devices$total.read.hits.per.sec / devices$total.reads.per.sec)
+devices$X..write.hit <- 100 * ((devices$random.write.hits.per.sec + devices$seq.write.hits.per.sec) / devices$total.writes.per.sec)
+devices$X..read.miss <- 100 * (devices$total.read.misses.per.sec / devices$total.reads.per.sec)
+devices$X..write.miss <- 100 * (devices$total.write.misses.per.sec / devices$total.writes.per.sec)
+devices$X..sequential.io <- 100 * (devices$total.seq.ios.per.sec / devices$total.ios.per.sec)
+devices$X..sequential.writes <- 100*(devices$seq.writes.per.sec / devices$total.ios.per.sec)
 devices$HA.Kbytes.transferred.per.sec <- devices$Kbytes.read.per.sec + devices$Kbytes.written.per.sec
 devices$average.read.size.in.Kbytes <- devices$Kbytes.read.per.sec / devices$total.reads.per.sec
 devices$average.write.size.in.Kbytes <- devices$Kbytes.written.per.sec / devices$total.writes.per.sec
 devices$average.io.size.in.Kbytes <- devices$HA.Kbytes.transferred.per.sec / devices$total.ios.per.sec
 devices$DA.Kbytes.transferred.per.sec <- devices$DA.Kbytes.read.per.sec + devices$DA.Kbytes.written.per.sec
-devices$X.read.hit.of.ios <- 100 * (devices$total.read.hits.per.sec / devices$total.ios.per.sec)
-devices$X.read.miss.of.ios <- 100 * (devices$total.read.misses.per.sec / devices$total.ios.per.sec)
-devices$X.write.hit.of.ios <- 100 * ((devices$random.write.hits.per.sec + devices$seq.write.hits.per.sec) / devices$total.ios.per.sec)
-devices$X.write.miss.of.ios <- 100 * (devices$total.write.misses.per.sec / devices$total.ios.per.sec)
-devices$device.capacity.in.(MB) <- devices$device.capacity * devices$device.block.size / 1024 / 1024
+devices$X..read.hit.of.ios <- 100 * (devices$total.read.hits.per.sec / devices$total.ios.per.sec)
+devices$X..read.miss.of.ios <- 100 * (devices$total.read.misses.per.sec / devices$total.ios.per.sec)
+devices$X..write.hit.of.ios <- 100 * ((devices$random.write.hits.per.sec + devices$seq.write.hits.per.sec) / devices$total.ios.per.sec)
+devices$X..write.miss.of.ios <- 100 * (devices$total.write.misses.per.sec / devices$total.ios.per.sec)
+devices$device.capacity.in.MB. <- devices$device.capacity * devices$device.block.size / (1024 * 1024)
 
 
 
@@ -136,3 +136,9 @@ slowDevices <- sort(unique(longTimeDevs[longTimeDevs[longTimeDevs$device.name,2]
 
 hist((devices$sampled.read.time.per.sec)[devices$sampled.read.time.per.sec<1000 & devices$sampled.read.time.per.sec>0 ],col='red',breaks=128)
 hist((devices$sampled.write.time.per.sec)[devices$sampled.write.time.per.sec<1000 & devices$sampled.write.time.per.sec>0 ],col='blue',breaks=32)
+
+f1 <- devices[,c('device.name','total.reads.per.sec', 'total.read.hits.per.sec', 'total.read.misses.per.sec', 'total.writes.per.sec', 'total.ios.per.sec', 'total.hits.per.sec', 'total.misses.per.sec', 'total.write.misses.per.sec', 'total.seq.ios.per.sec')]
+trps <- f1[,'device.name','total.reads.per.sec']
+n<-trps$device.name
+trps<-as.data.frame(t(trps[,-1]))
+colnames(trps) <- n
