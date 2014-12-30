@@ -126,9 +126,21 @@ devices$device.capacity.in.(MB) <- devices$device.capacity * devices$device.bloc
 
 
 # Response times > 0 and < 20,000 mSec
-d<-devices$sampled.read.time.per.sec[devices$sampled.read.time.per.sec>0&devices$sampled.read.time.per.sec<20000]
-hist(d,breaks=256)
+d<-devices$sampled.read.time.per.sec[devices$sampled.read.time.per.sec>0&devices$sampled.read.time.per.sec<10000]
+devnames<-c(unique(devices$device.name))
 
+sample<-NULL
+sample<-data.frame(unique(devices$TimeStamp))       
+for (i in seq_along(devnames)) {
+  t<-subset(devices,device.name==i,select=sampled.read.time.per.sec)
+  ## t<-subset(d2,device.name==devnames[i],select=sampled.read.time.per.sec)
+  names(t) = as.hexmode(devnames[i])
+  sample<-cbind(sample,t)
+}
+
+     
+     
+     
 # Which devices have a response time > 10 seconds?
 longTimeDevs <- devices[devices$sampled.read.time.per.sec>10000,]
 slowDevices <- sort(unique(longTimeDevs[longTimeDevs[longTimeDevs$device.name,2]]))
@@ -136,3 +148,7 @@ slowDevices <- sort(unique(longTimeDevs[longTimeDevs[longTimeDevs$device.name,2]
 
 hist((devices$sampled.read.time.per.sec)[devices$sampled.read.time.per.sec<1000 & devices$sampled.read.time.per.sec>0 ],col='red',breaks=128)
 hist((devices$sampled.write.time.per.sec)[devices$sampled.write.time.per.sec<1000 & devices$sampled.write.time.per.sec>0 ],col='blue',breaks=32)
+
+## Directors FE
+dfe<-read.csv('Directors FE')
+
