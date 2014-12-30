@@ -338,29 +338,22 @@ def parse(ifile, outdir, sequencenum):
                                 newvalue = val
                                 oldvalue = priorrow[key][i]
                                 if (oldvalue != '') and (oldvalue != " "):
-                                    if getval(ratetable, table, i):
-                                        vtype = getval(typetable, table, i)
-                                        if vtype != 'float':
-                                            try:
-                                                if False:
-                                                    nv = newvalue
-                                                    nv = nv.astype(np.uint64)
-                                                    ov = oldvalue
-                                                    ov = ov.astype(np.uint64)
-                                                    dv = deltat
-                                                    dv = dv.astype(np.uint64)
-                                                    delta = (nv - ov) / dv
-                                                else:
-                                                    delta = (np.uint64(newvalue) - np.uint64(oldvalue)) / np.uint64(deltat)
-                                            except RuntimeWarning:
-                                                print 'RuntimeWarning'
-                                                print 'newvalue:', newvalue
-                                                print 'oldvalue:', oldvalue
-                                                print 'deltat:', deltat
-                                                delta = 0  # xxx - is this the right thing to do on overflow ?
-                                        else:
-                                            delta = (long(float(newvalue) - float(oldvalue))) / float(deltat)
+                                    if getVal(rateTable, table, i):
+                                        type = getVal(typeTable,table,i)
+                                        if type != 'float':
+                                            nv = long(newvalue)
+                                            ov = long(oldvalue)
+                                            if ( nv > ov):
+                                                delta = (nv - ov) / deltat
+                                                print "ov",ov,"nv",nv,"delta:",delta
+                                            else:
 
+                                                MAXINT = 0xefffffff
+                                                delta = (newvalue + (MAXINT - oldvalue)) / deltat
+                                        else:
+                                            nv = float(newvalue)
+                                            ov = float(oldvalue)
+                                            delta = (long(nv - ov))  /deltat
                                         pvalues.append(delta)
                                     else:
                                         pvalues.append(newvalue)
@@ -381,9 +374,9 @@ def parse(ifile, outdir, sequencenum):
                     else:
                         firstsample[table] = False
                         lastt = t
-
-                closefile(outfile)
-    closefile(f)
+                CloseFile(outfile)
+    CloseFile(f)
+    return os.getpid()
 
 #
 # MAIN
@@ -396,12 +389,18 @@ if __name__ == "__main__":
     inputFiles = inputDirectory + 'T1*'
     ifile = iglob(inputFiles)
     results = []
-    pool = mp.Pool(processes=4)
+    pool = mp.Pool(processes=8)
     seq = os.getpid()
     for infile in sorted(ifile):
         r = pool.apply_async(parse, args=(infile, '.', seq))
         results.append(r)
         seq += 1
-        time.sleep(7)
+
+    for r in results:
+        try:
+            print 'results check:'
+            print(r.get(timeout=3))
+        except Exception: pass
+
 
     print "complete"
