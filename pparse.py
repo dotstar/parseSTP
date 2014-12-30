@@ -350,16 +350,20 @@ def parse(infile,outdir,sequencenum):
                                     if getVal(rateTable, table, i):
                                         type = getVal(typeTable,table,i)
                                         if type != 'float':
-                                            try:
-                                                delta = (numpy.uint64(newvalue) - numpy.uint64(oldvalue))/numpy.uint64(deltat)
-                                            except RuntimeWarning:
-                                                print 'RuntimeWarning'
-                                                print 'newvalue:',newvalue
-                                                print 'oldvalue:',oldvalue
-                                                print 'deltat:',deltat
-                                        else:
-                                            delta = (long(float(newvalue) - float(oldvalue)))/float(deltat)
+                                            nv = long(newvalue)
+                                            ov = long(oldvalue)
+                                            if ( nv > ov):
+                                                delta = (nv - ov) / deltat
+                                                print "ov",ov,"nv",nv,"delta:",delta
+                                            else:
 
+                                                MAXINT = 0xefffffff
+                                                delta = (newvalue + (MAXINT - oldvalue)) / deltat
+                                        else:
+                                            nv = float(newvalue)
+                                            ov = float(oldvalue)
+                                            delta = (long(nv - ov))  /deltat
+                                        
                                         pvalues.append(delta)
                                     else:
                                         pvalues.append(newvalue)
@@ -383,6 +387,7 @@ def parse(infile,outdir,sequencenum):
 
                 CloseFile(outfile)
     CloseFile(f)
+    return os.getpid()
 
 #
 # MAIN
@@ -399,12 +404,18 @@ if __name__ == "__main__":
     inputFiles = inputDirectory + 'T1*'
     ifile = iglob(inputFiles)
     results = []
-    pool = mp.Pool(processes=4)
+    pool = mp.Pool(processes=8)
     seq = os.getpid()
     for infile in sorted(ifile):
         r = pool.apply_async(parse,args=(infile,'.',seq))
         results.append(r)
         seq += 1
-        time.sleep(7)
+
+    for r in results:
+        try:
+            print 'results check:'
+            print(r.get(timeout=3))
+        except Exception: pass
+
 
     print "complete"
