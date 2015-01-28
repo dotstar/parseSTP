@@ -163,15 +163,18 @@ def printdb(trackingvar,seq):
         print
 
 def processheaders(fp,seq):
-    # Is there a clean way to do this without reading the whole file ?
-    # Does it matter if the net effect is that the file will be in buffer cache for the 2nd pass ?
+    # STP Files have a bunch of metric data in the top stanzas.
+    # roll through this and build headers
+    # additionally tag fields by data type and which ones are counters that need to be converted to rates
     global debug
     logging.debug("Processing Headers and Metrics - job {}".format(seq))
     while True:
+        # Skip to the first line which begins with <METRIC
         (firstline, tabletext, rc) = gettable(fp, '^<METRIC:', '^<END>', '^<TIMESTAMP: ',seq)
-        # if tabletext is None or rc == False:
         if tabletext is None:
-            logging.info('out of metrics?')
+            # we are out of METRIC stanzas and hit a TIMESTAMP
+            # This indicates we are about to see collected data
+            logging.info('header processing complete.')
             break  # We either ran out of Metrics in the file or didn't see an END.
         else:
             tablename = firstline[9:-3]
@@ -196,21 +199,14 @@ def processheaders(fp,seq):
                     columnname = linevalues[0]
                     columntype = linevalues[1]
                     setval(typetable, tablename, colnum, columntype)
-                    if len(linevalues) > 2:   # RDFA stats are nonstandard format in STP Jan 2014 - ARGH
-                        columnaction = linevalues[2]
-                        if columnaction == "Derived":
-                            setval(ratetable, tablename, colnum, False)
-                        elif columnaction == "ConvertToRate":
-                            setval(ratetable, tablename, colnum, True)
-                        elif columnaction == "Key":
-                            setval(ratetable, tablename, colnum, True)
-                        else:
-                            setval(ratetable, tablename, colnum, False)
-                    else:
-                        setval(ratetable,tablename,colnum,False)
-                    setval(headertable, tablename, colnum, columnname)
-
-                    columns.append(columnname)
+                    if re.search(',ConvertToRate,',line):
+                        setval(ratetable, tablename, colnum, True)
+                        setval(headertable, tablename, colnum, columnname)
+                        columns.append(columnname)
+                    elif not re.search(',Derived,',line):
+                        setval(ratetable, tablename, colnum, False)
+                        setval(headertable, tablename, colnum, columnname)
+                        columns.append(columnname)
                 colnum += 1
                 if debug > 40:
                     logging.debug('pass completed. columns = {}'.format(columns))
@@ -273,23 +269,40 @@ def buildheaders(headertable,table,i):
 
 def crates(table,newvalue,oldvalue,deltat,i):
     delta = 0
+
     if getval(ratetable, table, i):
+        # If it is a rate field, calculate the rate
+        # Otherwise just return the value (newvalue)
         vartype = getval(typetable,table,i)
         if vartype != 'float':
-            nv = long(newvalue)
+            # 64 bit integer math
             ov = long(oldvalue)
-            if ( nv > ov):
+            nv = long(newvalue)
+            if nv >= ov:
                 delta = (nv - ov) / deltat
-                print "ov",ov,"nv",nv,"delta:",delta
             else:
-
-                MAXINT = 0xefffffff
-                delta = (newvalue + (MAXINT - oldvalue)) / deltat
+                # rollover ?
+                if debug > 10:
+                    logging.warn('WARNING BAD ROLL OVER CONDITION')
+                    logging.debug('new value: {} old value {}'.format(nv,ov))
+                delta = (nv + (sys.maxint - ov)) / deltat
         else:
             nv = float(newvalue)
             ov = float(oldvalue)
-            delta = (long(nv - ov))  /deltat
+            if nv > ov:
+                delta = (long(nv - ov))  /deltat
+            else:
+                delta = nv +  (sys.float_info.max - ov) / deltat
+    else:
+        delta = newvalue
     return delta
+
+def deblank(line):
+    # remove cr/nl and trailing blanks
+    line = line.rstrip()  # remove CR NL and trailing blanks
+    line = re.sub(r'\s+$', '', line)
+    line = re.sub(r',$', '', line)
+    return line
 
 def parse(infile, outdir, sequencenum):
 
@@ -315,7 +328,8 @@ def parse(infile, outdir, sequencenum):
         os.makedirs(directory)  # Here to walk through the rest of the file and collect the data into tables ...
     f = openinputfile(infile, "r")
     (headers, rc) = processheaders(f,sequencenum)
-    logging.debug("job {} returning from processheaders with headers = {} and rc = {}".format(sequencenum,headers,rc))
+    if debug > 50:
+        logging.debug("job {} returning from processheaders with headers = {} and rc = {}".format(sequencenum,headers,rc))
     if not rc:
         exit('processHeaders failed')
     logging.debug( "job {} Rewinding file to process data elements.".format(sequencenum))
@@ -336,11 +350,11 @@ def parse(infile, outdir, sequencenum):
         # After that we may already have a TIMESTAMP in linebuffer
         if linebuffer and re.match("^<TIMESTAMP:", linebuffer):
             ts = linebuffer
-            if debug > 10:
+            if debug > 20:
                 logging.debug("job {}: first TIMESTAMP found match {}".format(sequencenum,ts))
         else:
             (ts, rc) = skipto(f, re.compile("^<TIMESTAMP:.*>"), re.compile('xyzzy'),sequencenum)
-            if debug > 10:
+            if debug > 20:
                 logging.debug("job {}: skipto returns {},{}".format(sequencenum,ts,rc))
                 if rc:
                     logging.debug("RC = True")
@@ -348,26 +362,26 @@ def parse(infile, outdir, sequencenum):
             break
         else:
             t = str(tsdecode(ts))
-            if debug > 10:
+            if debug > 20:
                 logging.debug('job {}: after decoding timestamp, time is:{},{}'.format(sequencenum,t,ts))
             if lastt > 0:
-                logging.debug('calculating elapsed time. prior: {} current: {}'.format(lastt,t))
+                if debug > 20:
+                    logging.debug('calculating elapsed time. prior: {} current: {}'.format(lastt,t))
                 deltat = long(t) - long(lastt)
                 if deltat < 0:
                     deltat = 0 - deltat
 
-                logging.debug("job {}: elapsed time is {} seconds".format(sequencenum.deltat))
-            logging.debug("collecting data")
+                logging.debug("job {}: elapsed time is {} seconds".format(sequencenum,deltat))
             while True:  # collect tables until we see another timestamp
                 (linebuffer, tabletext, rc) = gettable(f, "^<DATA:", "^<END", "^<TIMESTAMP: ",sequencenum)
                 if tabletext:
                     buf = tabletext.getvalue()
-                    logging.debug('gettable returns: linebuffer: {}, tabletext: {}, rc" {}'.format(linebuffer,buf,rc))
+                    # logging.debug('gettable returns: linebuffer: {}, tabletext: {}, rc" {}'.format(linebuffer,buf,rc))
                 if not rc:
                     break  # end while
                 table = parsetablename(linebuffer)
 
-                if debug > 3:
+                if debug > 9:
                     logging.debug('job {}: processing table: {}'.format(sequencenum,table))
                 header = buildheaders(headertable,table,sequencenum)
                 outfile = openoutputfile(table, directory, header)
@@ -375,9 +389,7 @@ def parse(infile, outdir, sequencenum):
                 stopregx = re.compile('^<END')
                 emptyre = re.compile("^$")
                 for line in mybuffer:
-                    line = line.rstrip()  # remove CR NL and trailing blanks
-                    line = re.sub(r'\s+$', '', line)
-                    line = re.sub(r',$', '', line)
+                    deblank(line)
                     values = line.split(",")  # The values in the record (before rate adjustment)
                     pvalues = []  # The values to be output (after rate adjustment)
                     key = table + '_' + values[0]
@@ -410,7 +422,7 @@ def parse(infile, outdir, sequencenum):
                                 pbuf = pbuf + ',' + str(v)
                             pbuf += '\n'
                             outfile.write(pbuf)  # output the record
-                            if debug > 9:
+                            if debug > 49:
                                 print pbuf
                             # Update the priorrow record, for next time ...
                             priorrow[key] = [None] * maxrow
@@ -444,7 +456,7 @@ def Timeout():
 if __name__ == "__main__":
 
     # Globals
-    debug = 10   # Debug level
+    debug = 5   # Debug level
     maxrow = 150   # Largest number of variables on a row of input data. (i.e. column width)
     numprocs = 0
 
@@ -460,7 +472,7 @@ if __name__ == "__main__":
     inputDirectory = './'
     inputFiles = inputDirectory + 'T1*'
     ifile = iglob(inputFiles)
-    MP = False
+    MP = True
     if MP:
         results = []
         nprocs = mp.cpu_count()
