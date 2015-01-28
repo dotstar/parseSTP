@@ -268,8 +268,6 @@ def buildheaders(headertable,table,i):
     return header
 
 def crates(table,newvalue,oldvalue,deltat,i):
-    delta = 0
-
     if getval(ratetable, table, i):
         # If it is a rate field, calculate the rate
         # Otherwise just return the value (newvalue)
@@ -283,7 +281,7 @@ def crates(table,newvalue,oldvalue,deltat,i):
             else:
                 # rollover ?
                 if debug > 10:
-                    logging.warn('WARNING BAD ROLL OVER CONDITION')
+                    logging.warn('Value rolled over, compensating')
                     logging.debug('new value: {} old value {}'.format(nv,ov))
                 delta = (nv + (sys.maxint - ov)) / deltat
         else:
@@ -294,15 +292,27 @@ def crates(table,newvalue,oldvalue,deltat,i):
             else:
                 delta = nv +  (sys.float_info.max - ov) / deltat
     else:
+        # Here if this isn't a rate.  return without further processing
         delta = newvalue
     return delta
 
 def deblank(line):
     # remove cr/nl and trailing blanks
-    line = line.rstrip()  # remove CR NL and trailing blanks
-    line = re.sub(r'\s+$', '', line)
-    line = re.sub(r',$', '', line)
+    line = line.rstrip()  # remove CR NL and trailing blanks and trailing comma
+    line = line.rstrip(",")
+    # line = re.sub(r'\s+$', '', line)
+    # line = re.sub(r',$', '', line)
     return line
+
+def dumptables(sequencenum):
+    # flush contents of rates, type, and header tables
+    # for debugging
+    print 'rates:'
+    printdb(ratetable,sequencenum)
+    print 'types:'
+    printdb(typetable,sequencenum)
+    print 'headers:'
+    printdb(headertable,sequencenum)
 
 def parse(infile, outdir, sequencenum):
 
@@ -335,12 +345,8 @@ def parse(infile, outdir, sequencenum):
     logging.debug( "job {} Rewinding file to process data elements.".format(sequencenum))
     f.close()
     if debug > 30:
-        print 'rates:'
-        printdb(ratetable,sequencenum)
-        print 'types:'
-        printdb(typetable,sequencenum)
-        print 'headers:'
-        printdb(headertable,sequencenum)
+        dumptables(sequencenum)
+
     f = openinputfile(infile, "r")
     linebuffer = ""
     priorrow = dict()  # Used to calculate rates.
@@ -374,13 +380,13 @@ def parse(infile, outdir, sequencenum):
                 logging.debug("job {}: elapsed time is {} seconds".format(sequencenum,deltat))
             while True:  # collect tables until we see another timestamp
                 (linebuffer, tabletext, rc) = gettable(f, "^<DATA:", "^<END", "^<TIMESTAMP: ",sequencenum)
-                if tabletext:
-                    buf = tabletext.getvalue()
-                    # logging.debug('gettable returns: linebuffer: {}, tabletext: {}, rc" {}'.format(linebuffer,buf,rc))
+                if debug > 90:
+                    if tabletext:
+                        buf = tabletext.getvalue()
+                        logging.debug('gettable returns: linebuffer: {}, tabletext: {}, rc" {}'.format(linebuffer,buf,rc))
                 if not rc:
                     break  # end while
-                table = parsetablename(linebuffer)
-
+                table = parsetablename(linebuffer)   # pull the table name from the 1st line of text
                 if debug > 9:
                     logging.debug('job {}: processing table: {}'.format(sequencenum,table))
                 header = buildheaders(headertable,table,sequencenum)
@@ -413,7 +419,8 @@ def parse(infile, outdir, sequencenum):
                                 oldvalue = priorrow[key][i]
                                 if (oldvalue != '') and (oldvalue != " "):
                                     delta = crates(table,newvalue,oldvalue,deltat,i)
-                                    pvalues.append(delta)
+                                    if delta!= "" :
+                                        pvalues.append(delta)
                                 else:
                                     pvalues.append(newvalue)
                                 i += 1
@@ -443,6 +450,8 @@ def fCompletecb(result):
     numprocs -= 1
     logging.info ("fCompletecb called")
     print result
+    return
+
 
 def Timeout():
     logging.info('timer expired, shutting down.')
@@ -472,7 +481,7 @@ if __name__ == "__main__":
     inputDirectory = './'
     inputFiles = inputDirectory + 'T1*'
     ifile = iglob(inputFiles)
-    MP = True
+    MP = False
     if MP:
         results = []
         nprocs = mp.cpu_count()
