@@ -36,6 +36,7 @@
       <w>openinputfile</w>
       <w>openoutputfile</w>
       <w>outdir</w>
+      <w>parsetablename</w>
       <w>patternfound</w>
       <w>pbuf</w>
       <w>printdb</w>
@@ -61,10 +62,12 @@
       <w>symmetrix</w>
       <w>tablename</w>
       <w>tabletext</w>
+      <w>tname</w>
       <w>trackingvar</w>
       <w>tsdecode</w>
       <w>typetable</w>
       <w>uint</w>
+      <w>vartype</w>
       <w>vmax</w>
       <w>vtype</w>
       <w>xyzzy</w>
