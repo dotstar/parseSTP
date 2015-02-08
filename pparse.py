@@ -500,21 +500,19 @@ def ccat(f,srcdir,tgtdir):
     t.close()
     return rc
 
-def copyfiles(datadir):
+def copyfiles(datadir,outdir):
     dirs = sorted(os.listdir(datadir))
     dlist = []   # Directories to consolidate
     for dir in dirs:
         if re.match("[0-9]{1,4}$",dir) and os.path.isdir("data"+"/"+dir):
             # Any directory which is all numbers is one we want to process
-            dlist.extend(dir)
+            dlist.append(dir)
             # Build a list of files in the first directory
             # and Join it with the files from the other directories
     print "input list: {}".format(dlist)
 
     filelist = sorted(os.listdir(datadir+"/"+str(min(dlist))))
 
-    outdir = mkoutdir(datadir,dlist)
-    print "creating outdir {}".format(outdir)
     if  os.path.exists(outdir):
         logging.error("output directory already exists {}.That is not expected".format(outdir))
     else:
@@ -544,6 +542,7 @@ if __name__ == "__main__":
     headers = {}
 
     datadir = "data"
+    ourdir = "output"
 
     logging.basicConfig(level=logging.DEBUG)
 
@@ -579,7 +578,7 @@ if __name__ == "__main__":
             print 'numprocs =', numprocs
             time.sleep(3)
         print "MP: completed rates calcs and intermediate file generation"
-        copyfiles(datadir)
+        copyfiles(datadir,outdir)
 
     else:
         i = 1
@@ -587,4 +586,4 @@ if __name__ == "__main__":
             parse(infile,datadir,i)
             i += 1
         print "Single Threaded: completed rates calcs and intermediate file generation"
-        copyfiles(datadir)
+        copyfiles(datadir,outdir)
