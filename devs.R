@@ -49,9 +49,10 @@ devread <- function(filename,rows){
 
 
 library(dplyr)
+
 datad <- "~/parseSTP/data/output8"
 fname <- paste(datad,"Devices",sep = '/')
-devs <- devread(fname,rows=-1)
+devs <- devread(fname,rows=1000000)
 
 # remove volumes with no disk I/O.
 # ?? gatekeepers, tdevs? << Am I doing this backward >>?
@@ -64,7 +65,7 @@ meaniops <- devs %>% group_by(device.name) %>% summarise(avg = mean(total.ios.pe
 # find the top 100 vols by total.ios.per.sec
 meaniops <- meaniops[order(meaniops$avg,decreasing=TRUE),]
 topvols <- head(meaniops$device.name,32)
-par (mfrow=c(4,4))
+par (mar=c(4,3,4,2),mfrow=c(4,4),oma=c(3,2,6,2))
 for (vol in topvols) {
   tdf <- filter(devs,device.name==vol)
   x <- tdf$TimeStamp
@@ -73,3 +74,4 @@ for (vol in topvols) {
   lines(supsmu(x,y),col='chocolate2',lwd=2)
   abline(h=mean(y),lty=2)
 }
+title('LUNs with top mean IOPS',outer=TRUE)
