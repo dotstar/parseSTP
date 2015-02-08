@@ -120,14 +120,6 @@ getdirs <- function(df) {
 }
 
 fedetails <-function(df) {
-  ### fe_box(df)
-  # plot pre director graphs
-  # IOPS, READ Time,  Write Time, Service Time Hist
-  # df <- tbl_df(df)
-  # t1<-select(df,TimeStamp,director.number,ios.per.sec,average.read.time.ms, average.write.time.ms)
-  # t1<-filter(t1,average.read.time.ms!=Inf)
-  # t1<-t1[complete.cases(t1),]
-  # df <- t1
   
   dirs <- getdirs(df)
   
@@ -174,12 +166,19 @@ fedetails <-function(df) {
     t1<- t1[complete.cases(t1),]
     t1<-filter(t1,port.0.read.Kbytes.per.sec!=Inf)
     x <- t1$TimeStamp
-    y <- t1$port.0.read.Kbytes.per.sec/1000
+    y0 <- t1$port.0.read.Kbytes.per.sec/1000
+    y1 <- t1$port.1.read.Kbytes.per.sec/1000    
     t1<-filter(t1,port.1.read.Kbytes.per.sec!=Inf)
-    plot(x,y,col='blue',pch=19,cex=.5,xlab='',ylab='read MB/Sec')
-    points(x=t1$TimeStamp,y=t1$port.1.read.Kbytes.per.sec/1000,col='green',pch=19,cex=.5,xlab='',ylab='')
+    
+    plot(x,y0,col='blue',pch=19,cex=.5,xlab='',ylab='read MB/Sec')
+    abline(h=mean(y0),col='blue',lty=2)
+    
+    points(x=t1$TimeStamp,y=y1,col='green',pch=19,cex=.5,xlab='',ylab='')
+    abline(h=mean(y1),col='green',lty=2)
+
     t <- paste(d,"Read Bandwidth (MB/Sec)")
-    title(main=t)
+    title(main=t)    
+    
     
     # Bandwidth  - Writes
     t1<-select(filter(times,director.number==d),TimeStamp,
@@ -188,9 +187,14 @@ fedetails <-function(df) {
     t1 <- t1[complete.cases(t1),]
     t1<-filter(t1,port.0.write.Kbytes.per.sec!=Inf)
     t1<-filter(t1,port.1.write.Kbytes.per.sec!=Inf)
-
-    plot(x=t1$TimeStamp,y=t1$port.0.write.Kbytes.per.sec/1000,col='blue',pch=19,cex=.5,xlab='',ylab='read MB/Sec')
-    points(x=t1$TimeStamp,y=t1$port.1.write.Kbytes.per.sec/1000,col='green',pch=19,cex=.5,xlab=F,ylab=F)
+    y0 <- t1$port.0.write.Kbytes.per.sec/1000
+    y1 <- t1$port.1.write.Kbytes.per.sec/1000
+    plot(x=t1$TimeStamp,y=y0,col='blue',pch=19,cex=.5,xlab='',ylab='read MB/Sec')
+    abline(h=mean(y0),col='blue',lty=2)
+    
+    points(x=t1$TimeStamp,y=y1,col='green',pch=19,cex=.5,xlab=F,ylab=F)
+    abline(h=mean(y1),col='green',lty=2)
+    
     t <- paste(d,"Write Bandwidth (MB/Sec)")
     title(main=t)
 
@@ -200,10 +204,12 @@ fedetails <-function(df) {
     t1 <- filter(t1,average.read.time.ms != Inf)
     x<-t1[[1]]
     y<-t1[[2]]
-    plot(x,y,ylab='mSec',col='gold',pch=19,cex.axis=0.75,main=(paste('Director:',d,'Read Service Time (mSec')))
+    plot(x,y,ylab='mSec',xlab='',col='gold',pch=19,cex.axis=0.75,main=(paste('Director:',d,'Read Service Time (mSec')))
+    abline(h=mean(y),col='gold',lty=2)
     lines(supsmu(x,y),col='black',lwd=3)
+    
     b<- 100
-    hist(y,breaks=b,main=paste(d,'Read Service Time (mSec)'),ylab='Frequency',col='gold')
+    hist(y,breaks=b,main=paste(d,'Read Service Time (mSec)'),ylab='Frequency',xlab='',col='gold')
     abline(v=mean(y),lty=2)
 
     # Write Service Time
@@ -212,10 +218,11 @@ fedetails <-function(df) {
     t1 <- filter(t1,average.write.time.ms != Inf)
     x<-t1[[1]]
     y<-t1[[2]]
-    plot(x,y,t=,ylab='mSec',cex.axis=0.75,col='green4',pch=19,main=(paste('Director:',d,'Write mSec Service Time')))
+    plot(x,y,t=,ylab='mSec',xlab='',cex.axis=0.75,col='green4',pch=19,main=(paste('Director:',d,'Write mSec Service Time')))
+    abline(h=mean(y),col='green4',lty=2)
     lines(supsmu(x,y),col='black',lwd=3)
     
-    hist(y,breaks=b,main=paste(d,'Write Service Time (mSec)'),col='green4',ylab='Frequency')        
+    hist(y,breaks=b,main=paste(d,'Write Service Time (mSec)'),col='green4',ylab='Frequency',xlab='')        
     abline(v=mean(y),lty=2)
     # 8th plot - estmate queue lengths
     # Assume it is open systems for now.
@@ -224,10 +231,6 @@ fedetails <-function(df) {
     
     # just work with this director
       d2 <- filter(df,director.number == d)
-      d2 <- select(d2,TimeStamp,average.queue.depth.range.0:average.queue.depth.range.9,
-                  accumulated.queue.depth.range.0:accumulated.queue.depth.range.9,
-                  queue.depth.count.range.0:queue.depth.count.range.9)
-      
       q <- select(d2,average.queue.depth.range.0:average.queue.depth.range.9)
             
       addem <- function(v1,v2) { 
@@ -243,7 +246,19 @@ fedetails <-function(df) {
         sum(v1*v2) 
       }
       qlen <- apply(q,1,addem,openmid)
-      plot(d2$TimeStamp,qlen,pch=19,col='purple',main=dir,xlab='',ylab='est queue length')
+      plot(d2$TimeStamp,qlen,pch=19,col='purple',main=paste(d,'Estimate Queue Length'),xlab='',ylab='est queue length')
+      hist(qlen,breaks=128,col='purple',main=paste(d,'Estimated Queue Length'))
+      abline(v=mean(qlen),lty=2)
+    
+      # Fill the page with empty plots.
+    plot.new()
+    plot.new()
+    plot.new()
+    plot.new()
+    plot.new()
+    plot.new()
+    plot.new()
+    
     } # End For
 }
 
