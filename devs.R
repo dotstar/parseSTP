@@ -52,7 +52,7 @@ library(dplyr)
 
 datad <- "~/parseSTP/data/output8"
 fname <- paste(datad,"Devices",sep = '/')
-devs <- devread(fname,rows=1000000)
+devs <- devread(fname,rows=-1)
 
 # remove volumes with no disk I/O.
 # ?? gatekeepers, tdevs? << Am I doing this backward >>?
@@ -61,11 +61,14 @@ n<-devs %>% group_by(device.name) %>% summarise(max(DA.Kbytes.transferred.per.se
 # n2 <- n[n[2]>0,]
 devs <- devs[ n[2] > 0, ]
 
+# TOP N by IOPS
 meaniops <- devs %>% group_by(device.name) %>% summarise(avg = mean(total.ios.per.sec)) %>% arrange(avg)
-# find the top 100 vols by total.ios.per.sec
+# find the top 64 vols by total.ios.per.sec
 meaniops <- meaniops[order(meaniops$avg,decreasing=TRUE),]
-topvols <- head(meaniops$device.name,32)
+topvols <- head(meaniops$device.name,16)
 par (mar=c(4,3,4,2),mfrow=c(4,4),oma=c(3,2,6,2))
+i = 16
+pagenum = 1
 for (vol in topvols) {
   tdf <- filter(devs,device.name==vol)
   x <- tdf$TimeStamp
@@ -73,5 +76,93 @@ for (vol in topvols) {
   plot(x,y,ylab='iops',xlab='',main=paste('volume:',vol),cex=0.5,pch=19,col='blue')
   lines(supsmu(x,y),col='chocolate2',lwd=2)
   abline(h=mean(y),lty=2)
+  i = i - 1
+  if ( i == 0 ) {
+    i = 16
+    title('LUNs with top mean IOPS',outer=TRUE)
+    mtext(pagenum,side=1, outer = TRUE)
+    pagenum = pagenum + 1
+  }
 }
-title('LUNs with top mean IOPS',outer=TRUE)
+
+# TOP N by Random Read IOPS
+meaniops <- devs %>% group_by(device.name) %>% summarise(avg = max(random.reads.per.sec)) %>% arrange(avg)
+# find the top 64 vols by random.reads.per.sec
+meaniops <- meaniops[order(meaniops$avg,decreasing=TRUE),]
+topvols <- head(meaniops$device.name,16)
+par (mar=c(4,3,4,2),mfrow=c(4,4),oma=c(3,2,6,2))
+i = 16
+pagenum = 1
+for (vol in topvols) {
+  tdf <- filter(devs,device.name==vol)
+  x <- tdf$TimeStamp
+  y <- tdf$random.reads.per.sec
+  plot(x,y,ylab='iops',xlab='',main=paste('volume:',vol),cex=0.5,pch=19,col='blue')
+  lines(supsmu(x,y),col='chocolate2',lwd=2)
+  abline(h=mean(y),lty=2)
+  i = i - 1
+  if ( i == 0 ) {
+    i = 16
+    title('LUNs with max Random Read IOPS',outer=TRUE)
+    mtext(pagenum,side=1, outer = TRUE)
+    pagenum = pagenum + 1
+  }
+}
+
+# TOP N by total BW
+meaniops <- devs %>% group_by(device.name) %>% summarise(avg = max(Kbytes.read.per.sec+Kbytes.written.per.sec)) %>% arrange(avg)
+# find the top N vols by BW
+meaniops <- meaniops[order(meaniops$avg,decreasing=TRUE),]
+topvols <- head(meaniops$device.name,16)
+par (mar=c(4,3,4,2),mfrow=c(4,4),oma=c(3,2,6,2))
+i = 16
+pagenum = 1
+for (vol in topvols) {
+  tdf <- filter(devs,device.name==vol)
+  x <- tdf$TimeStamp
+  y <- (tdf$Kbytes.read.per.sec + tdf$Kbytes.written.per.sec) / (2^10)
+  plot(x,y,ylab='iops',xlab='',main=paste('volume:',vol),cex=0.5,pch=19,col='blue')
+  lines(supsmu(x,y),col='chocolate2',lwd=2)
+  abline(h=mean(y),lty=2)
+  i = i - 1
+  if ( i == 0 ) {
+    i = 16
+    title('LUNs by peak BW (MB/Sec)',outer=TRUE)
+    mtext(pagenum,side=1, outer = TRUE)
+    pagenum = pagenum + 1
+  }
+}
+
+# top mean BW
+meaniops <- devs %>% group_by(device.name) %>% summarise(avg = mean(Kbytes.read.per.sec+Kbytes.written.per.sec)) %>% arrange(avg)
+# find the top N vols by BW
+meaniops <- meaniops[order(meaniops$avg,decreasing=TRUE),]
+topvols <- head(meaniops$device.name,16)
+par (mar=c(4,3,4,2),mfrow=c(4,4),oma=c(3,2,6,2))
+i = 16
+pagenum = 1
+for (vol in topvols) {
+  tdf <- filter(devs,device.name==vol)
+  x <- tdf$TimeStamp
+  y <- (tdf$Kbytes.read.per.sec + tdf$Kbytes.written.per.sec) / (2^10)
+  plot(x,y,ylab='iops',xlab='',main=paste('volume:',vol),cex=0.5,pch=19,col='blue')
+  lines(supsmu(x,y),col='chocolate2',lwd=2)
+  abline(h=mean(y),lty=2)
+  i = i - 1
+  if ( i == 0 ) {
+    i = 16
+    title('LUNs by mean BW (MB/Sec)',outer=TRUE)
+    mtext(pagenum,side=1, outer = TRUE)
+    pagenum = pagenum + 1
+  }
+}
+
+
+# build a table of the stats of top iop vols
+df <- filter(devs,device.name %in% topvols)
+
+a <- df %>% group_by(device.name) %>% summarise(avgiops=mean(total.ios.per.sec)) 
+s <- df %>% group_by(device.name) %>% summarise(sdiops=df(total.ios.per.sec)) 
+t <- cbind(a,s)
+
+
