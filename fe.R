@@ -69,8 +69,7 @@ feread <- function(filename) {
 } # end fe_read
 
 feboxplot <- function(df) {
-  opar <- par(no.readonly=T)
-  par (mfrow=c(2,1))
+  par (mfrow=c(2,1),bg='grey')
   # prepare for box plots
   t2<-select(df,TimeStamp,director.number,average.read.time.ms, average.write.time.ms)
   t2 <- t2[complete.cases(t2),]  # remove NA
