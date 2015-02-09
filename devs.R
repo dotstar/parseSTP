@@ -157,12 +157,18 @@ for (vol in topvols) {
   }
 }
 
-
+options(digits=1)
 # build a table of the stats of top iop vols
-df <- filter(devs,device.name %in% topvols)
-
-a <- df %>% group_by(device.name) %>% summarise(avgiops=mean(total.ios.per.sec)) 
-s <- df %>% group_by(device.name) %>% summarise(sdiops=df(total.ios.per.sec)) 
-t <- cbind(a,s)
-
-
+t<-devs %>% group_by(device.name) %>% summarise( 
+  iop_mean=mean(total.ios.per.sec),
+  iop_min=min(total.ios.per.sec),
+  iop_max=max(total.ios.per.sec),
+  iop_sd=sd(total.ios.per.sec),
+  rdBW_mean=mean(Kbytes.read.per.sec),
+  rdBW_max=max(Kbytes.read.per.sec),
+  wtBW_mean=mean(Kbytes.written.per.sec),
+  wtBW_max=max(Kbytes.written.per.sec),
+  rdsz = mean(average.read.size.in.Kbytes),
+  wtsz = mean(average.write.size.in.Kbytes,na.rm=T)
+) %>% arrange(desc(wtBW_max))
+head(as.data.frame(t),75)
