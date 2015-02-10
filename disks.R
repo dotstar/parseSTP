@@ -16,8 +16,14 @@ diskread <- function(filename){
   return(d)
 }
 
+
+
+
 ## MAIN 
 library(dplyr)
+
+serialnum <- "HK19570227"
+
 datad <- "~/parseSTP/data/output8"
 datad <- "/media/cdd/Seagate Backup Plus Drive/MC Mainframe/MasterCard 2217/output"
 fname <- paste(datad,"Disks",sep = '/')
@@ -32,7 +38,7 @@ t <- d %>% group_by(device) %>% summarize(
   mean_scsi = mean(total.SCSI.command.per.sec)
 ) %>% arrange(desc(max_scsi))
 topN <- head(t$device,18)
-par(mfrow = c(3,3))
+par(mfrow = c(2,2))
 for (n in topN) {
   local <- filter(d,device==n)
   with (local, plot(TimeStamp,total.SCSI.command.per.sec,pch=19,cex=0.4,col='blue',main=n))
@@ -48,4 +54,24 @@ sums <- t %>% group_by(TimeStamp) %>% summarise ( MBps = sum(Kbytes.written.per.
 with (t, plot(sums$TimeStamp,sums$MBps,pch=19,cex=0.3,col='red',main='Frame Disk BW - MBps') )
 with (t, lines(supsmu(sums$TimeStamp,sums$MBps),pch=19,cex=0.3,col='blue',main='Frame Disk BW - MBps') )
 with (t, abline(h=mean(sums$MBps),col='black',lty=2) )
+
+## Disk I/O Sizes - Frame wide
+par(mfrow = c(2,1)) 
+
+rm.Inf <- function(x,var) {
+  t<-x[!is.na(x[,var]),]   
+  t <- t[t[,var] < 1e9,]  
+  return (t)
+}
+
+t <- rm.Inf(d,'average.kbytes.per.read')
+summary(t$average.kbytes.per.read)
+
+hist(t$average.kbytes.per.read,col='red4',breaks=128,main=paste(serialnum,'Average kBytes/read'),xlab='' )
+abline(v=mean(t$average.kbytes.per.read),col='black',lwd=3)
+
+
+t<- rm.Inf(d,'average.kbytes.per.write')
+hist(t$average.kbytes.per.write,col='blue4',breaks=128,main=paste(serialnum,'Average kBytes/write'),xlab='' )
+abline(v=mean(t$average.kbytes.per.write),col='black',lwd=3)
 
