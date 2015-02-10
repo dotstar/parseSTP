@@ -263,10 +263,64 @@ fedetails <-function(df) {
 
 library(dplyr)
 datad <- "~/parseSTP/data/output8"
+datad <- "/media/cdd/D667-9E25/MasterCard/0621-stp/output"
 fname <- paste(datad,"Directors FE",sep = '/')
 fe <- feread(fname)
 
 # pdf(file="Rplots.pdf",width=14,height=8.5)
 # feboxplot(fe)
-fedetails(fe)
+# fedetails(fe)
 # dev.off()
+
+# summarize front end stats in table
+st<-fe %>% 
+  group_by(director.number)  %>%
+  summarize(
+    mean_wrt= mean(average.write.time.ms),
+    min_wrt= min(average.write.time.ms),
+    max_wrt= max(average.write.time.ms),
+    sd_wrt= sd(average.write.time.ms)
+  ) %>%
+  arrange(desc(mean_wrt))
+
+# Density plots
+par(mfrow=c(4,4), mar=c(5.5,3,2,2))
+dirs <- getdirs(fe)
+
+ff <- select(fe,director.number,average.write.time.ms,average.read.time.ms)
+fr <- filter(ff,! is.na(average.read.time.ms))
+fr <- filter(ff,average.read.time.ms < Inf)
+fw <- filter(ff,! is.na(average.write.time.ms))
+fw <- filter(ff,average.write.time.ms < Inf)
+
+for (dir in dirs) {
+  d <- filter(fr, director.number == dir )
+  # Reads
+  x <- d$average.read.time.ms
+
+  # Find everything about the 99th quantile and set = 99th quantile
+  topvalue <- as.numeric(quantile(x,c(0.99)))
+  x[x > topvalue] <- topvalue 
+  n <-  topvalue
+  breaks = 512
+  # par(fig=c(1,1,1,01),new=T)
+  # hist(x,main=paste(dir,'avg read svc mSec'),xlab='mSec',breaks,xlim=c(0,n),add=F)
+  hist(x,breaks,add=F)
+  par(fig=c(0,0.8,0.55,1),new=F)
+  boxplot(x, outline=F, horizontal = T, add=T, col = c('blue4','chocolate4'),pars = list(boxwex = 1),axes=FALSE )
+  
+}
+
+{
+  # Writes
+  d <- filter(fw, director.number == dir )
+  x <- d$average.write.time.ms
+  # Find everything about the 99th quantile and set = 99th quantile
+  topvalue <- as.numeric(quantile(x,c(0.99)))
+  x[x > topvalue] <- topvalue 
+  n <-  topvalue
+  breaks = topvalue * 10
+  breaks <- 512
+  hist(x,main=paste(dir,'avg write svc mSec'),xlab='mSec',breaks,xlim=c(0,n))
+}
+
