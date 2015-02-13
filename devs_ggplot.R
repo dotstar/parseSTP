@@ -52,6 +52,7 @@ library(dplyr)
 library(ggplot2)
 
 datad <- "~/parseSTP/data/output8"
+datad <- "/media/cdd/Seagate Backup Plus Drive/validate/0621-stp/output"
 fname <- paste(datad,"Devices",sep = '/')
 devs <- devread(fname,rows=-1)
 
