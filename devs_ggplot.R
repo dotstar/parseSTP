@@ -1,5 +1,5 @@
 devread <- function(filename,rows){
-  cols <- c('integer','factor',rep('integer',56))
+  cols <- c('integer','factor',rep('numeric',56))
   d<-read.table(filename,header = T, colClasses=cols, stringsAsFactors = F,sep=',',nrows=rows)
   d<-tbl_df(d)
   d$TimeStamp<-as.POSIXct(d$TimeStamp,origin = "1970-01-01",tz="GMT")
@@ -47,19 +47,11 @@ devread <- function(filename,rows){
   return(d)
 }
 
-# Import storage groups from BIN File
-# based on offline SYMCLI from Sean Cummins: http://blog.scummins.com/?p=56
-# SYMCLI command: symsg list -v -o XML (or similar)
-#
-# XML parsing from https://hopstat.wordpress.com/2014/01/14/faster-xml-conversion-to-data-frames/
-
-
-
 parseSG <- function(infile) {
   # Read the XML file associated with symsg list -v --output XML 
   # This has details of which Devices are associated with which storage groups
   # return a data frame, suitable for mapping device name to volue serial number
-  doc = xmlParse(xfile)
+  doc = xmlParse(infile)
   xpath='/SymCLI_ML/SG'
   # get the nodes for Storage Groups (SG)
   nodeset <- getNodeSet(doc,xpath)
@@ -70,13 +62,13 @@ parseSG <- function(infile) {
   for (node in nodeset) {
     # Name of this storage group
     sgname = xmlValue(node[['SG_Info']][['name']])
-    print (paste('processing storage group',sgname))
+    # print (paste('processing storage group',sgname))
     symid = xmlValue(node[['SG_Info']][['symid']])
     count = xmlValue(node[['SG_Info']][['SG_group_info']][['count']])
     if ( count > 1 ) {
       # If this is a cascaded entry, don't add to the data frame
       # The cascaded elements will be added instead
-      print('cascading detected\n')
+      # print('cascading detected\n')
       #       names = xmlToList(node[['SG_Info']][['SG_group_info']][['SG']],simplify=TRUE )
       #       for (n in names) {
       #         print (paste('   cascaded name',n))
@@ -88,8 +80,59 @@ parseSG <- function(infile) {
       df <- rbind(df,ndf)
     }
   }
+  names(df) = c( "sgname","symid","device.name","pd_name","configuration","status","megabytes")
+  df$device.name <- paste('0x',df$device.name,sep='')
+
   return(df)
 }
+
+
+# Multiple plot function
+# http://www.cookbook-r.com/Graphs/Multiple_graphs_on_one_page_(ggplot2)/
+# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
+# - cols:   Number of columns in layout
+# - layout: A matrix specifying the layout. If present, 'cols' is ignored.
+#
+# If the layout is something like matrix(c(1,2,3,3), nrow=2, byrow=TRUE),
+# then plot 1 will go in the upper left, 2 will go in the upper right, and
+# 3 will go all the way across the bottom.
+#
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  require(grid)
+  
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+  
+  numPlots = length(plots)
+  
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                     ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+  
+  if (numPlots==1) {
+    print(plots[[1]])
+    
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+    
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+      
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+
 
 library(dplyr)
 library(ggplot2)
@@ -98,12 +141,22 @@ library('XML')
 # File with storage group information in XML format
 # from symsg list -v --output XML
 xdir <- '/media/cdd/Seagate Backup Plus Drive/HK192602527_VMAX'
-xfile <- paste(xdir,'sg_2527.xml',sep='/')
+sgfile <- paste(xdir,'sg_2527.xml',sep='/')
 
+# Input stats
+# as parsed from TTP file
 datad <- paste(xdir,'output',sep='/')
-
 fname <- paste(datad,"Devices",sep = '/')
+
+print('reading ttp data for devices')
 devs <- devread(fname,rows=-1)
+print('reading Storage Group XML')
+stgroups <-parseSG(sgfile)
+
+print('joining storage group names into devices')
+devs <- merge(devs,stgroups,by='device.name')
+devs$LongLabel <- paste(devs$device.name,devs$sgname)
+rm(stgroups)
 
 # remove volumes with no disk I/O.
 # ?? gatekeepers, tdevs? << Am I doing this backward >>?
@@ -113,24 +166,39 @@ n<-devs %>% group_by(device.name) %>% summarise(max(DA.Kbytes.transferred.per.se
 # only devices with IOPS are included
 devs <- devs[ n[2] > 0, ]
 rm(n)
+
 # Add a factor to each LUN, based on IO Size
 # Try dividing into quartiles.
 sz <- select(devs,TimeStamp,device.name,average.io.size.in.Kbytes)
 sz <- filter(sz,! is.na(average.io.size.in.Kbytes), average.io.size.in.Kbytes != Inf)
-cutpoints <- quantile(sz$average.io.size.in.Kbytes,seq(0,1,length=11),na.rm=TRUE)
+cutpoints <- quantile(sz$average.io.size.in.Kbytes,seq(0,1,length=5),na.rm=TRUE)
 devs$sz <- cut(devs$average.io.size.in.Kbytes,cutpoints)
 
 # TOP N by IOPS
 meaniops <- devs %>% group_by(device.name) %>% summarise(avg = mean(total.ios.per.sec)) %>% arrange(avg)
 # find the top n vols by total.ios.per.sec
 meaniops <- meaniops[order(meaniops$avg,decreasing=TRUE),]
-topvols <- head(meaniops$device.name,4)
 
-  tdf <- filter(devs,device.name %in% topvols)
+topvols <- head(meaniops$device.name,8)
+rm(meaniops)
+
+plots <-list()
+i = 1
+for (vol in topvols) {
+  tdf <- filter(devs,device.name == vol)
   g <- ggplot(tdf, aes(TimeStamp,total.ios.per.sec))
-  p <- g + geom_point() + geom_smooth() + facet_grid (device.name ~ .) +
-  ggtitle ('top LUNS, ordered by total IOPS')
-  print(p)
+  p <- g + geom_point() + geom_smooth()
+  lunName <- unique(tdf$LongLabel)
+  title <- paste(lunName,"IOPS")
+  print(title)
+  p <- p + ggtitle (title)
+  plots[[i]] <- p
+  # print(p)
+  i = i + 1
+}
+multiplot(plotlist = plots ,cols=2)
+
+stop()
 
 top <- head(meaniops$device.name,16)
 d <- filter(devs,device.name %in% top)

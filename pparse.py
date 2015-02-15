@@ -343,7 +343,7 @@ def parse(infile, tmpdir, sequencenum):
 
     directory = tmpdir + '/' + str(sequencenum)  # Output directory, mkdir if needed.
     if os.path.exists(directory):
-        logging.critical('scratch file directory already exists {}. existing.'.format(directory))
+        logging.critical('scratch file directory already exists {}. Exiting.'.format(directory))
         sys.exit()
     else:
         os.makedirs(directory)  # Here to walk through the rest of the file and collect the data into tables ...
@@ -528,7 +528,7 @@ def copyfiles(ddir,odir):
             # and Join it with the files from the other directories
     print "input list: {}".format(dlist)
 
-    if dirs.length > 1:
+    if len(dirs) > 1:
         filelist = sorted(os.listdir(ddir+"/"+str(min(dlist))))
     else:
         filelist = os.listdir(ddir+"/"+dlist)
@@ -563,25 +563,17 @@ if __name__ == "__main__":
     headers = {}
 
     inputdir = '/media/cdd/Seagate Backup Plus Drive/HK192602527_VMAX/'
-    tmpdir = inputdir+"data"
-    outdir = inputdir+"output"
-
+    tmpdir = inputdir + "data"
+    outdir = inputdir + "output"
 
     logging.basicConfig(level=logging.DEBUG)
 
     logging.debug('inputdir: {} tmpdir: {} outdir: {}'.format(inputdir,tmpdir,outdir))
 
-
-    # Build a sorted list of filenames
-
-    inputDirectory = './'
     inputDirectory = '/media/cdd/Seagate Backup Plus Drive/HK192602527_VMAX/'
-    # inputFiles = inputDirectory + 'T1*'
-
+    inputFiles = inputDirectory + 'T1*.ttp'
     inputFiles = inputDirectory + 'T1_20140710_040014_000192602527.ttp'
     ifile = glob.glob(inputFiles)
-
-
 
     MP = False   # True = Fork processes, False = 1 Process (for debugging)
     if MP:
@@ -612,7 +604,8 @@ if __name__ == "__main__":
 
     else:
         i = 1
-        for infile in (ifile):
+        for infile in sorted(ifile):
+            import cProfile
             parse(infile, tmpdir,i)
             i += 1
         print "Single Threaded: completed rates calculations and intermediate file generation"
