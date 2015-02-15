@@ -22,7 +22,7 @@
 
 import os
 import gzip
-from glob import iglob
+import glob
 import io
 import re
 import sys
@@ -322,9 +322,9 @@ def dumptables(sequencenum):
     print 'headers:'
     printdb(headertable,sequencenum)
 
-def parse(infile, outdir, sequencenum):
+def parse(infile, tmpdir, sequencenum):
 
-    logging.debug('function parse called\n infile: {}, outdir:{}, seq: {}'.format(infile,outdir,sequencenum))
+    logging.debug('function parse called\n infile: {}, tmpdir:{}, seq: {}'.format(infile,tmpdir,sequencenum))
     logging.debug('PID: {}'.format(os.getpid()))
     # Global table which tracks which variables are rates and need additional processing
     # True if the column is a Rate
@@ -338,12 +338,16 @@ def parse(infile, outdir, sequencenum):
     global debug
 
     # time stamp variables, used to calculate the sample interval (period) of the collection
-    lastt = 0
-    deltat = 0
+    lastt = 0L
+    deltat = 0L
 
-    directory = os.getcwd() + '/' + outdir + '/' + str(sequencenum)  # Output directory, mkdir if needed.
-    if not os.path.exists(directory):
+    directory = tmpdir + '/' + str(sequencenum)  # Output directory, mkdir if needed.
+    if os.path.exists(directory):
+        logging.critical('scratch file directory already exists {}. existing.'.format(directory))
+        sys.exit()
+    else:
         os.makedirs(directory)  # Here to walk through the rest of the file and collect the data into tables ...
+
     f = openinputfile(infile, "r")
     (headers, rc) = processheaders(f,sequencenum)
     if debug > 50:
@@ -412,9 +416,7 @@ def parse(infile, outdir, sequencenum):
                     if not stopregx.match(line) and not emptyre.match(line):
                         if firstsample.get(table) is None:
                             # store all of the columns so we can process rates on the next pass
-                            # print 'saving '+key+' for next pass '
-                            # if debug > 5:
-                            #    print 'first time for table:', table, 'key instance:', values[0]
+
                             priorrow[key] = [None] * maxrow
                             j = 0
                             for v in values:
@@ -423,8 +425,22 @@ def parse(infile, outdir, sequencenum):
                         else:
                             i = 0
                             for val in values:
+                                newvalue = 0L
+                                oldvalue = 0L
                                 newvalue = val
-                                oldvalue = priorrow[key][i]
+                                try:
+                                    oldvalue = priorrow[key][i]
+                                except KeyError:
+                                    # There is a case where a device is added in the middle of an STP collection
+                                    # we can't calculate a rate, because we don't yet have a prior value
+                                    # catch this and be ready for the next iteration
+                                    priorrow[key] = [None] * maxrow
+                                    j = 0
+                                    for v in values:
+                                        priorrow[key][j] = v
+                                        j += 1
+                                    oldvalue = ""
+
                                 if (oldvalue != '') and (oldvalue != " "):
                                     delta = crates(table,newvalue,oldvalue,deltat,i)
                                     if delta!= "" :
@@ -470,13 +486,6 @@ def Timeout():
     time.sleep(10)
     sys.exit()
 
-def mkoutdir(datadir,list):
-    # pick a name for the output, and create the directory
-    print "max list " ,max(list)
-    ndir = int(max(list))+1
-    outdir = datadir+"/output"+str(ndir)
-    return outdir
-
 def ccat(f,srcdir,tgtdir):
     # Copy file to the tgtdirectory
     # If it already exists in the target, skip the headers and concatenate
@@ -519,7 +528,11 @@ def copyfiles(ddir,odir):
             # and Join it with the files from the other directories
     print "input list: {}".format(dlist)
 
-    filelist = sorted(os.listdir(ddir+"/"+str(min(dlist))))
+    if dirs.length > 1:
+        filelist = sorted(os.listdir(ddir+"/"+str(min(dlist))))
+    else:
+        filelist = os.listdir(ddir+"/"+dlist)
+
 
     if  os.path.exists(odir):
         logging.error("output directory already exists {}.That is not expected".format(odir))
@@ -549,17 +562,28 @@ if __name__ == "__main__":
     headertable = {}
     headers = {}
 
-    datadir = "data"
-    outdir = "output"
+    inputdir = '/media/cdd/Seagate Backup Plus Drive/HK192602527_VMAX/'
+    tmpdir = inputdir+"data"
+    outdir = inputdir+"output"
+
 
     logging.basicConfig(level=logging.DEBUG)
+
+    logging.debug('inputdir: {} tmpdir: {} outdir: {}'.format(inputdir,tmpdir,outdir))
+
 
     # Build a sorted list of filenames
 
     inputDirectory = './'
-    inputFiles = inputDirectory + 'T1*'
-    ifile = iglob(inputFiles)
-    MP = True   # True = Fork processes, False = 1 Process (for debugging)
+    inputDirectory = '/media/cdd/Seagate Backup Plus Drive/HK192602527_VMAX/'
+    # inputFiles = inputDirectory + 'T1*'
+
+    inputFiles = inputDirectory + 'T1_20140710_040014_000192602527.ttp'
+    ifile = glob.glob(inputFiles)
+
+
+
+    MP = False   # True = Fork processes, False = 1 Process (for debugging)
     if MP:
         results = []
         nprocs = mp.cpu_count()
@@ -570,7 +594,7 @@ if __name__ == "__main__":
         for infile in sorted(ifile):
             i += 1
             logging.info('{}: submitting file {}'.format(i,infile) )
-            r = pool.apply_async(parse, args=(infile, datadir, i), callback = fCompletecb)
+            r = pool.apply_async(parse, args=(infile, tmpdir, i), callback = fCompletecb)
             numprocs += 1
         # Wait for maxtime or for all processes to complete.
         # which ever comes first.
@@ -584,12 +608,12 @@ if __name__ == "__main__":
             print 'number of processes =', numprocs
             time.sleep(3)
         print "MP: completed rates calculations and intermediate file generation"
-        copyfiles(datadir,outdir)
+        copyfiles(tmpdir,outdir)
 
     else:
         i = 1
-        for infile in sorted(ifile):
-            parse(infile,datadir,i)
+        for infile in (ifile):
+            parse(infile, tmpdir,i)
             i += 1
         print "Single Threaded: completed rates calculations and intermediate file generation"
-        copyfiles(datadir,outdir)
+        copyfiles(tmpdir,outdir)
