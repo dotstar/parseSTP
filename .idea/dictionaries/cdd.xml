@@ -6,13 +6,18 @@
       <w>columnaction</w>
       <w>columnname</w>
       <w>columntype</w>
+      <w>copyfiles</w>
       <w>ctime</w>
+      <w>datadir</w>
+      <w>ddir</w>
       <w>deltat</w>
       <w>diematch</w>
       <w>diere</w>
       <w>dieregx</w>
       <w>directoryname</w>
+      <w>dlist</w>
       <w>emptyre</w>
+      <w>filelist</w>
       <w>filenames</w>
       <w>fileptr</w>
       <w>firstline</w>
@@ -28,10 +33,13 @@
       <w>linebuffer</w>
       <w>linevalues</w>
       <w>maxrow</w>
+      <w>maxtime</w>
       <w>mkdir</w>
       <w>mybuffer</w>
       <w>myopen</w>
       <w>newvalue</w>
+      <w>nprocs</w>
+      <w>odir</w>
       <w>oldvalue</w>
       <w>openinputfile</w>
       <w>openoutputfile</w>
@@ -53,6 +61,7 @@
       <w>skipto</w>
       <w>startmatch</w>
       <w>startre</w>
+      <w>stderr</w>
       <w>stopmatch</w>
       <w>stopregx</w>
       <w>stpbuffer</w>

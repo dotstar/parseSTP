@@ -47,12 +47,61 @@ devread <- function(filename,rows){
   return(d)
 }
 
+# Import storage groups from BIN File
+# based on offline SYMCLI from Sean Cummins: http://blog.scummins.com/?p=56
+# SYMCLI command: symsg list -v -o XML (or similar)
+#
+# XML parsing from https://hopstat.wordpress.com/2014/01/14/faster-xml-conversion-to-data-frames/
+
+
+
+parseSG <- function(infile) {
+  # Read the XML file associated with symsg list -v --output XML 
+  # This has details of which Devices are associated with which storage groups
+  # return a data frame, suitable for mapping device name to volue serial number
+  doc = xmlParse(xfile)
+  xpath='/SymCLI_ML/SG'
+  # get the nodes for Storage Groups (SG)
+  nodeset <- getNodeSet(doc,xpath)
+  
+  df <- data.frame()
+  # for each sg node build a node data frame (ndf)
+  # then append it to the function return data frame (df)
+  for (node in nodeset) {
+    # Name of this storage group
+    sgname = xmlValue(node[['SG_Info']][['name']])
+    print (paste('processing storage group',sgname))
+    symid = xmlValue(node[['SG_Info']][['symid']])
+    count = xmlValue(node[['SG_Info']][['SG_group_info']][['count']])
+    if ( count > 1 ) {
+      # If this is a cascaded entry, don't add to the data frame
+      # The cascaded elements will be added instead
+      print('cascading detected\n')
+      #       names = xmlToList(node[['SG_Info']][['SG_group_info']][['SG']],simplify=TRUE )
+      #       for (n in names) {
+      #         print (paste('   cascaded name',n))
+      #       }
+    } else {
+      # Device details
+      ndf = xmlToDataFrame(node[['DEVS_List']])
+      ndf<-cbind(sgname,symid,ndf)
+      df <- rbind(df,ndf)
+    }
+  }
+  return(df)
+}
 
 library(dplyr)
 library(ggplot2)
+library('XML')
 
-datad <- "~/parseSTP/data/output8"
-datad <- "/media/cdd/Seagate Backup Plus Drive/validate/0621-stp/output"
+# File with storage group information in XML format
+# from symsg list -v --output XML
+xdir <- '/media/cdd/Seagate Backup Plus Drive/HK192602527_VMAX'
+xfile <- paste(xdir,'sg_2527.xml',sep='/')
+
+datad <- paste(xdir,'output',sep='/')
+
 fname <- paste(datad,"Devices",sep = '/')
 devs <- devread(fname,rows=-1)
 

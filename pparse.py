@@ -126,8 +126,14 @@ def tsdecode(ts):
     return retval
 
 def setval(trackingvar, table, i, rateflag):
-    # Tag column i of table as a rate field
-    # This is probably very un-pythonesque.
+    # setval - used to track which columns are rate fields
+    # and thus need future calculation
+    # Overloaded to keep a list of variable names to be printed
+    # as the variables in the first row.
+    #
+    # Essentially this is a point of access into a couple of arrays
+    # used for bookkeeping [ ratatable , headertable, typetable ]
+
     # if the table hasn't been seen before, create a row
     global maxrow
     try:
@@ -141,9 +147,11 @@ def setval(trackingvar, table, i, rateflag):
     return rc
 
 def getval(trackingvar, table, i):
-    # Given a table name and column
-    # Returns True if this is
-    # rate column
+    # get value from tracking arrays
+    # ratetable
+    # headertable
+    # typetable
+
     if not trackingvar[table][i]:
         rc = None
     else:
@@ -500,8 +508,8 @@ def ccat(f,srcdir,tgtdir):
     t.close()
     return rc
 
-def copyfiles(datadir,outdir):
-    dirs = sorted(os.listdir(datadir))
+def copyfiles(ddir,odir):
+    dirs = sorted(os.listdir(ddir))
     dlist = []   # Directories to consolidate
     for dir in dirs:
         if re.match("[0-9]{1,4}$",dir) and os.path.isdir("data"+"/"+dir):
@@ -511,18 +519,18 @@ def copyfiles(datadir,outdir):
             # and Join it with the files from the other directories
     print "input list: {}".format(dlist)
 
-    filelist = sorted(os.listdir(datadir+"/"+str(min(dlist))))
+    filelist = sorted(os.listdir(ddir+"/"+str(min(dlist))))
 
-    if  os.path.exists(outdir):
-        logging.error("output directory already exists {}.That is not expected".format(outdir))
+    if  os.path.exists(odir):
+        logging.error("output directory already exists {}.That is not expected".format(odir))
     else:
-        os.makedirs(outdir)
+        os.makedirs(odir)
 
     for dir in dlist:
         for f in filelist:
-            fqn = datadir+'/'+dir+"/"+str(f)
+            fqn = ddir+'/'+dir+"/"+str(f)
             if os.path.isfile(fqn):
-                ccat(f,(datadir+"/"+dir),outdir)
+                ccat(f,(ddir+"/"+dir),odir)
             else:
                 logging.error("input file is missing {}".format(fqn))
 
@@ -542,7 +550,7 @@ if __name__ == "__main__":
     headers = {}
 
     datadir = "data"
-    ourdir = "output"
+    outdir = "output"
 
     logging.basicConfig(level=logging.DEBUG)
 
@@ -564,8 +572,6 @@ if __name__ == "__main__":
             logging.info('{}: submitting file {}'.format(i,infile) )
             r = pool.apply_async(parse, args=(infile, datadir, i), callback = fCompletecb)
             numprocs += 1
-
-
         # Wait for maxtime or for all processes to complete.
         # which ever comes first.
         TIMER = False
@@ -574,10 +580,10 @@ if __name__ == "__main__":
             t = Timer(maxtime,Timeout)
             t.start()
         # Spin, while the queue processes
-        while (numprocs > 0):
-            print 'numprocs =', numprocs
+        while numprocs > 0:
+            print 'number of processes =', numprocs
             time.sleep(3)
-        print "MP: completed rates calcs and intermediate file generation"
+        print "MP: completed rates calculations and intermediate file generation"
         copyfiles(datadir,outdir)
 
     else:
@@ -585,5 +591,5 @@ if __name__ == "__main__":
         for infile in sorted(ifile):
             parse(infile,datadir,i)
             i += 1
-        print "Single Threaded: completed rates calcs and intermediate file generation"
+        print "Single Threaded: completed rates calculations and intermediate file generation"
         copyfiles(datadir,outdir)
