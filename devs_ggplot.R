@@ -87,6 +87,55 @@ parseSG <- function(infile) {
 }
 
 
+
+topLuns <- function(devs,v='total.ios.per.sec',plots=4,plotsperpage = 4, columns = 2) {
+  m <- devs[,c('TimeStamp','device.name',v,'LongLabel')]
+  m <- tbl_df(m)
+  names(m) <- c('time','device','value','label')
+  m2 <- m %>% group_by(device) %>% summarise(avg = mean(value,na.rm = TRUE)) %>% arrange(desc(avg))
+
+  pages = plots / plotsperpage
+  for (page in 1:pages) {
+    topvols <- as.vector(head(m2$device,plots))
+    plots <-list()
+    i = 1
+    for (vol in topvols) {
+      tdf <- filter(m,device == vol)
+      g <- ggplot(tdf, aes(x = time,y = value ))
+      p <- g + geom_point(col='blue4') 
+      p <- p + geom_smooth(col='darkred')
+      p50 <- as.numeric(quantile(tdf$value,probs=c(.5),na.rm=TRUE))      
+      p95 <- as.numeric(quantile(tdf$value,probs=c(.95),na.rm=TRUE))
+      start <- min(tdf$time) - 500
+      p <- p + geom_hline(yintercept=p50,colour='green4',linetype=2)
+      p <- p + annotate("text",x=start,y=p50,label=c("mean"))
+      p <- p + geom_hline(yintercept=p95,color='green',linetype=4)
+      p <- p + annotate("text",x=start,y=p95,label=c("95th"))
+      lunName <- unique(tdf$label)
+      title <- paste(v,lunName)
+      print(title)
+      p <- p + ggtitle (title)
+      plots[[i]] <- p
+      # print(p)
+      i = i + 1
+    }
+    multiplot(plotlist = plots ,cols=columns)
+  }
+}
+
+topN <- function (n=4) {
+  top <- head(meaniops$device.name,n)
+  d <- filter(devs,device.name %in% top)
+  g <- ggplot(d,aes(TimeStamp,total.ios.per.sec))
+  p <- g + geom_point(alpha = 0.6, aes(color=device.name,size=average.io.size.in.Kbytes)) + geom_smooth()
+  p <- p + theme(legend.title=element_text(face="italic"))
+  p <- p + theme(legend.key.size = unit(2,"cm"))
+  p <- p + scale_size_continuous(range = c(1, 25))
+  title <- paste(serialnumber,"top",n,"LUNs by mean IOPS")
+  p <- p + ggtitle(title)
+  return(p)
+}
+
 # Multiple plot function
 # http://www.cookbook-r.com/Graphs/Multiple_graphs_on_one_page_(ggplot2)/
 # ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
@@ -143,6 +192,7 @@ library('XML')
 xdir <- '/media/cdd/Seagate Backup Plus Drive/HK192602527_VMAX'
 sgfile <- paste(xdir,'sg_2527.xml',sep='/')
 
+
 # Input stats
 # as parsed from TTP file
 datad <- paste(xdir,'output',sep='/')
@@ -152,20 +202,12 @@ print('reading ttp data for devices')
 devs <- devread(fname,rows=-1)
 print('reading Storage Group XML')
 stgroups <-parseSG(sgfile)
+serialnumber <- as.character(unique(stgroups$symid))
 
 print('joining storage group names into devices')
 devs <- merge(devs,stgroups,by='device.name')
 devs$LongLabel <- paste(devs$device.name,devs$sgname)
 rm(stgroups)
-
-# remove volumes with no disk I/O.
-# ?? gatekeepers, tdevs? << Am I doing this backward >>?
-
-n<-devs %>% group_by(device.name) %>% summarise(max(DA.Kbytes.transferred.per.sec))
-# n2 <- n[n[2]>0,]
-# only devices with IOPS are included
-devs <- devs[ n[2] > 0, ]
-rm(n)
 
 # Add a factor to each LUN, based on IO Size
 # Try dividing into quartiles.
@@ -174,38 +216,32 @@ sz <- filter(sz,! is.na(average.io.size.in.Kbytes), average.io.size.in.Kbytes !=
 cutpoints <- quantile(sz$average.io.size.in.Kbytes,seq(0,1,length=5),na.rm=TRUE)
 devs$sz <- cut(devs$average.io.size.in.Kbytes,cutpoints)
 
+
+# remove volumes with no disk I/O.
+# ?? gatekeepers, tdevs? << Am I doing this backward >>?
+n<-devs %>% group_by(device.name) %>% summarise(max(DA.Kbytes.transferred.per.sec))
+# n2 <- n[n[2]>0,]
+# only devices with IOPS are included
+devs <- devs[ n[2] > 0, ]
+rm(n)
+
 # TOP N by IOPS
 meaniops <- devs %>% group_by(device.name) %>% summarise(avg = mean(total.ios.per.sec)) %>% arrange(avg)
-# find the top n vols by total.ios.per.sec
 meaniops <- meaniops[order(meaniops$avg,decreasing=TRUE),]
+plots=9
+plotsperpage=9
+columns=3
 
-topvols <- head(meaniops$device.name,8)
-rm(meaniops)
+topLuns(devs,v='total.ios.per.sec',plots=plots,plotsperpage=plotsperpage, columns=columns)
+topLuns(devs,v='total.reads.per.sec',plots=plots,plotsperpage, columns)
+topLuns(devs,v='total.writes.per.sec',plots,plotsperpage, columns)
+topLuns(devs,v='Kbytes.read.per.sec',plots,plotsperpage, columns)
+topLuns(devs,v='Kbytes.written.per.sec',plots,plotsperpage, columns)
+topLuns(devs,v='write.pending.count',plots,plotsperpage, columns)
+topLuns(devs,v='sampled.write.time.per.sec',plots,plotsperpage, columns)
+topLuns(devs,v='sampled.read.time.per.sec',plots,plotsperpage, columns)
 
-plots <-list()
-i = 1
-for (vol in topvols) {
-  tdf <- filter(devs,device.name == vol)
-  g <- ggplot(tdf, aes(TimeStamp,total.ios.per.sec))
-  p <- g + geom_point() + geom_smooth()
-  lunName <- unique(tdf$LongLabel)
-  title <- paste(lunName,"IOPS")
-  print(title)
-  p <- p + ggtitle (title)
-  plots[[i]] <- p
-  # print(p)
-  i = i + 1
-}
-multiplot(plotlist = plots ,cols=2)
-
-stop()
-
-top <- head(meaniops$device.name,16)
-d <- filter(devs,device.name %in% top)
-g <- ggplot(d,aes(TimeStamp,total.ios.per.sec))
-p <- g + geom_point(alpha = 0.4, aes(color=device.name,size=sz)) + geom_smooth()
-
-print(p)
+topN(n=5)
 
 stop()
 
