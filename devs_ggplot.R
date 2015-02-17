@@ -88,10 +88,11 @@ parseSG <- function(infile) {
 
 
 
-topLuns <- function(devs,v='total.ios.per.sec',plots=4,plotsperpage = 4, columns = 2) {
+topLuns <- function(devs,v='total.ios.per.sec',plots=4,plotsperpage = 4, columns = 2,size = 1) {
   m <- devs[,c('TimeStamp','device.name',v,'LongLabel')]
   m <- tbl_df(m)
   names(m) <- c('time','device','value','label')
+  m <- filter(m, !is.na(m$value), m$value != Inf)
   m2 <- m %>% group_by(device) %>% summarise(avg = mean(value,na.rm = TRUE)) %>% arrange(desc(avg))
 
   pages = plots / plotsperpage
@@ -102,7 +103,11 @@ topLuns <- function(devs,v='total.ios.per.sec',plots=4,plotsperpage = 4, columns
     for (vol in topvols) {
       tdf <- filter(m,device == vol)
       g <- ggplot(tdf, aes(x = time,y = value ))
-      p <- g + geom_point(col='blue4') 
+      if ( size != 1 ) {
+        p <- g + geom_point(col='chocolate3',aes(size=4))         
+        } else {
+        p <- g + geom_point(col='blue4')         
+      }
       p <- p + geom_smooth(col='darkred')
       p50 <- as.numeric(quantile(tdf$value,probs=c(.5),na.rm=TRUE))      
       p95 <- as.numeric(quantile(tdf$value,probs=c(.95),na.rm=TRUE))
@@ -239,7 +244,15 @@ topLuns(devs,v='Kbytes.read.per.sec',plots,plotsperpage, columns)
 topLuns(devs,v='Kbytes.written.per.sec',plots,plotsperpage, columns)
 topLuns(devs,v='write.pending.count',plots,plotsperpage, columns)
 topLuns(devs,v='sampled.write.time.per.sec',plots,plotsperpage, columns)
-topLuns(devs,v='sampled.read.time.per.sec',plots,plotsperpage, columns)
+topLuns(devs,v='rdf.copy.Kbytes.per.sec',plots,plotsperpage, columns)
+topLuns(devs,v='average.read.size.in.Kbytes',plots,plotsperpage, columns)
+topLuns(devs,v='average.write.size.in.Kbytes',plots,plotsperpage, columns)
+topLuns(devs,v='average.io.size.in.Kbytes',plots,plotsperpage, columns)
+
+# read.time seems to always have outliers
+ndevs <- devs[ devs$sampled.read.time.per.sec < 1e5,]
+topLuns(ndevs,v='sampled.read.time.per.sec',plots,plotsperpage, columns)
+topLuns(ndevs,v='sampled.write.time.per.sec',plots,plotsperpage, columns)
 
 topN(n=5)
 
