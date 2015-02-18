@@ -47,6 +47,92 @@ devread <- function(filename,rows){
   return(d)
 }
 
+abbreviatedDevRead <- function(filename,rows){
+  filename <- '/data/HK19260257/output/cdd'
+  # use scan directly, don't keep columns we don't use
+  # to reduce memory demands
+
+  hdr <- getheaders()
+  what <- as.list(c('numeric','character',rep('numeric',58)))
+  
+  d <- as.data.frame(matrix(nrow=60,ncol=60,byrow=TRUE))
+  d<-as.data.frame(scan(file=filename,skip=1,nlines=10000,sep=",",what=what))
+  names(d) <- hdr$var
+}
+
+getheaders <- function() {
+  # convenience routine
+  # loads the headers data frame
+  # which tell which columns to consider for reporting
+  # and thus read into the dataframe
+  
+  v <- c( 
+    "TimeStamp",TRUE,
+    "device.name",TRUE,
+    "random.ios.per.sec",TRUE,
+    "random.reads.per.sec",TRUE,
+    "random.writes.per.sec",TRUE,
+    "random.hits.per.sec",TRUE,
+    "random.read.hits.per.sec",TRUE,
+    "random.write.hits.per.sec",TRUE,
+    "seq.reads.per.sec",TRUE,
+    "seq.read.hits.per.sec",TRUE,
+    "seq.writes.per.sec",FALSE,
+    "seq.write.hits.per.sec",FALSE,
+    "Kbytes.read.per.sec",TRUE,
+    "Kbytes.written.per.sec",TRUE,
+    "DA.read.requests.per.sec",FALSE,
+    "DA.write.requests.per.sec",FALSE,
+    "DA.prefetched.tracks.per.sec",FALSE,
+    "DA.prefetched.tracks.used.per.sec",FALSE,
+    "DA.Kbytes.read.per.sec",FALSE,
+    "DA.Kbytes.written.per.sec",FALSE,
+    "DA.req.time.per.sec",FALSE,
+    "DA.disk.time.per.sec",FALSE,
+    "DA.task.time.per.sec",FALSE,
+    "write.pending.count",FALSE,
+    "max.write.pending.threshold",FALSE,
+    "sampled.read.time.per.sec",FALSE,
+    "sampled.write.time.per.sec",FALSE,
+    "sampled.read.miss.time.per.sec",FALSE,
+    "sampled.WP.disconnect.time.per.sec",FALSE,
+    "sampled.RDF.write.time.per.sec",FALSE,
+    "sampled.reads.per.sec",FALSE,
+    "sampled.writes.per.sec",FALSE,
+    "sampled.read.miss.waits.per.sec",FALSE,
+    "sampled.WP.disconnects.per.sec",FALSE,
+    "sampled.RDF.write.waits.per.sec",FALSE,
+    "num.invalid.tracks",FALSE,
+    "M1.invalid.tracks",FALSE,
+    "M2.invalid.tracks",FALSE,
+    "M3.invalid.tracks",FALSE,
+    "M4.invalid.tracks",FALSE,
+    "DA.partial.sector.write.Kbytes.per.sec",FALSE,
+    "DA.optimize.write.Kbytes.per.sec",FALSE,
+    "DA.xor.reads.per.sec",FALSE,
+    "DA.xor.Kbytes.read.per.sec",FALSE,
+    "DA.read.for.copy.per.sec",FALSE,
+    "DA.Kbytes.read.for.copy.per.sec",FALSE,
+    "DA.writes.for.copy.per.sec",FALSE,
+    "DA.Kbytes.written.for.copy.per.sec",FALSE,
+    "DA.read.for.vlun.migration.per.sec",FALSE,
+    "DA.Kbytes.read.for.vlun.migration",FALSE,
+    "DA.writes.for.vlun.migration.per.sec",FALSE,
+    "DA.Kbytes.written.for.vlun.migration",FALSE,
+    "DA.writes.for.rebuild.per.sec",FALSE,
+    "DA.Kbytes.written.for.rebuild.per.sec",FALSE,
+    "rdf.copy.per.sec",FALSE,
+    "rdf.copy.Kbytes.per.sec",FALSE,
+    "device.capacity",FALSE,
+    "device.block.size",FALSE,
+    "optimized.read.miss.Kbytes",FALSE,
+    "optimized.read.miss",FALSE
+  )
+  hdr <- as.data.frame(matrix(data=v,nrow=60,ncol=2,byrow=TRUE))
+  names(hdr) <- c('varnm','keep')
+  return(hdr)
+}
+
 parseSG <- function(infile) {
   # Read the XML file associated with symsg list -v --output XML 
   # This has details of which Devices are associated with which storage groups
@@ -195,6 +281,7 @@ library('XML')
 # File with storage group information in XML format
 # from symsg list -v --output XML
 xdir <- '/media/cdd/Seagate Backup Plus Drive/HK192602527_VMAX'
+xdir <- '/data/HK192602527'
 sgfile <- paste(xdir,'sg_2527.xml',sep='/')
 
 
