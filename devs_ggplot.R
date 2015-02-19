@@ -1,135 +1,148 @@
-devread <- function(filename,rows){
-  cols <- c('integer','factor',rep('numeric',56))
-  d<-read.table(filename,header = T, colClasses=cols, stringsAsFactors = F,sep=',',nrows=rows)
+calcDerived <- function (d) {
+  # TTP file has a number of derived variables
+  # which are calculated in this routine.
+  # note that if you restrict which values are in the data frame
+  # some of these derived variables are incalculable. (and thus commented out)
   d<-tbl_df(d)
   d$TimeStamp<-as.POSIXct(d$TimeStamp,origin = "1970-01-01",tz="GMT")
-  d$sampled.average.read.time.ms <- d$sampled.read.time.per.sec / d$sampled.reads.per.sec
-  d$sampled.average.write.time.ms <- d$sampled.write.time.per.sec / d$sampled.writes.per.sec
-  d$sampled.average.read.miss.time.ms <- d$sampled.read.miss.time.per.sec / d$sampled.read.miss.waits.per.sec
-  d$sampled.average.WP.disconnect.time.ms <- d$sampled.WP.disconnect.time.per.sec / d$sampled.WP.disconnects.per.sec
-  d$sampled.average.RDF.write.time.ms <- d$sampled.RDF.write.time.per.sec / d$sampled.RDF.write.waits.per.sec
-  d$average.DA.req.time..ms <- d$DA.req.time.per.sec / d$DA.read.requests.per.sec
-  d$average.DA.disk.time..ms <- d$DA.disk.time.per.sec / d$DA.read.requests.per.sec
-  d$average.DA.task.time..ms <- d$DA.task.time.per.sec / d$DA.read.requests.per.sec
-  d$total.reads.per.sec <- d$random.reads.per.sec + d$seq.reads.per.sec
-  d$total.read.hits.per.sec <- d$random.read.hits.per.sec + d$seq.read.hits.per.sec
-  d$total.read.misses.per.sec <- d$total.reads.per.sec - d$total.read.hits.per.sec
-  d$total.writes.per.sec <- d$random.writes.per.sec + d$seq.writes.per.sec
-  d$total.ios.per.sec <- d$total.reads.per.sec + d$total.writes.per.sec
-  d$total.hits.per.sec <- d$total.read.hits.per.sec + d$random.write.hits.per.sec + d$seq.write.hits.per.sec
-  d$total.misses.per.sec <- d$total.ios.per.sec - d$total.hits.per.sec
-  d$total.write.misses.per.sec <- d$total.writes.per.sec - d$random.write.hits.per.sec - d$seq.write.hits.per.sec
-  d$total.seq.ios.per.sec <- d$seq.reads.per.sec + d$seq.writes.per.sec
-  d$random.read.misses.per.sec <- d$random.reads.per.sec - d$random.read.hits.per.sec
-  d$percent.random.read.hit <- 100 * (d$random.read.hits.per.sec / d$total.ios.per.sec)
-  d$percent.random.read.miss <- 100 * (d$random.read.misses.per.sec / d$total.ios.per.sec)
-  d$percent.sequential.read <- 100 * (d$seq.reads.per.sec / d$total.ios.per.sec)
-  d$percent.write <- 100 * (d$total.writes.per.sec / d$total.ios.per.sec)
-  d$percent.read <- 100 * (d$total.reads.per.sec / d$total.ios.per.sec)
-  d$percent.hit <- 100 * (d$total.hits.per.sec / d$total.ios.per.sec)
-  d$percent.miss <- 100 - d$percent.hit
-  d$percent.read.hit <- 100 * (d$total.read.hits.per.sec / d$total.reads.per.sec)
-  d$percent.write.hit <- 100 * ((d$random.write.hits.per.sec + d$seq.write.hits.per.sec) / d$total.writes.per.sec)
-  d$percent.read.miss <- 100 * (d$total.read.misses.per.sec / d$total.reads.per.sec)
-  d$percent.write.miss <- 100 * (d$total.write.misses.per.sec / d$total.writes.per.sec)
-  d$percent.sequential.io <- 100 * (d$total.seq.ios.per.sec / d$total.ios.per.sec)
-  d$percent.sequential.writes <- 10 * (d$seq.writes.per.sec / d$total.ios.per.sec)
-  d$HA.Kbytes.transferred.per.sec <- d$Kbytes.read.per.sec + d$Kbytes.written.per.sec
-  d$average.read.size.in.Kbytes <- d$Kbytes.read.per.sec / d$total.reads.per.sec
-  d$average.write.size.in.Kbytes <- d$Kbytes.written.per.sec / d$total.writes.per.sec
-  d$average.io.size.in.Kbytes <- d$HA.Kbytes.transferred.per.sec / d$total.ios.per.sec
-  d$DA.Kbytes.transferred.per.sec <- d$DA.Kbytes.read.per.sec + d$DA.Kbytes.written.per.sec
-  d$percent.read.hit.of.ios <- 100 * (d$total.read.hits.per.sec / d$total.ios.per.sec)
-  d$percent.read.miss.of.ios <- 100 * (d$total.read.misses.per.sec / d$total.ios.per.sec)
-  d$percent.write.hit.of.ios <- 100 * ((d$random.write.hits.per.sec + d$seq.write.hits.per.sec) / d$total.ios.per.sec)
-  d$percent.write.miss.of.ios <- 100 * (d$total.write.misses.per.sec / d$total.ios.per.sec)
-  d$device.capacity.in.MB <- (d$device.capacity/(2^20)) * d$device.block.size 
+   d$sampled.average.read.time.ms <- d$sampled.read.time.per.sec / d$sampled.reads.per.sec
+   d$sampled.average.write.time.ms <- d$sampled.write.time.per.sec / d$sampled.writes.per.sec
+#   d$sampled.average.read.miss.time.ms <- d$sampled.read.miss.time.per.sec / d$sampled.read.miss.waits.per.sec
+#   d$sampled.average.WP.disconnect.time.ms <- d$sampled.WP.disconnect.time.per.sec / d$sampled.WP.disconnects.per.sec
+#   d$sampled.average.RDF.write.time.ms <- d$sampled.RDF.write.time.per.sec / d$sampled.RDF.write.waits.per.sec
+#   d$average.DA.req.time..ms <- d$DA.req.time.per.sec / d$DA.read.requests.per.sec
+#   d$average.DA.disk.time..ms <- d$DA.disk.time.per.sec / d$DA.read.requests.per.sec
+#   d$average.DA.task.time..ms <- d$DA.task.time.per.sec / d$DA.read.requests.per.sec
+   d$total.reads.per.sec <- d$random.reads.per.sec + d$seq.reads.per.sec
+#   d$total.read.hits.per.sec <- d$random.read.hits.per.sec + d$seq.read.hits.per.sec
+#   d$total.read.misses.per.sec <- d$total.reads.per.sec - d$total.read.hits.per.sec
+   d$total.writes.per.sec <- d$random.writes.per.sec + d$seq.writes.per.sec
+   d$total.ios.per.sec <- d$total.reads.per.sec + d$total.writes.per.sec
+#   d$total.hits.per.sec <- d$total.read.hits.per.sec + d$random.write.hits.per.sec + d$seq.write.hits.per.sec
+#   d$total.misses.per.sec <- d$total.ios.per.sec - d$total.hits.per.sec
+#   d$total.write.misses.per.sec <- d$total.writes.per.sec - d$random.write.hits.per.sec - d$seq.write.hits.per.sec
+#   d$total.seq.ios.per.sec <- d$seq.reads.per.sec + d$seq.writes.per.sec
+#   d$random.read.misses.per.sec <- d$random.reads.per.sec - d$random.read.hits.per.sec
+#   d$percent.random.read.hit <- 100 * (d$random.read.hits.per.sec / d$total.ios.per.sec)
+#   d$percent.random.read.miss <- 100 * (d$random.read.misses.per.sec / d$total.ios.per.sec)
+#   d$percent.sequential.read <- 100 * (d$seq.reads.per.sec / d$total.ios.per.sec)
+   d$percent.write <- 100 * (d$total.writes.per.sec / d$total.ios.per.sec)
+   d$percent.read <- 100 * (d$total.reads.per.sec / d$total.ios.per.sec)
+#   d$percent.hit <- 100 * (d$total.hits.per.sec / d$total.ios.per.sec)
+#   d$percent.miss <- 100 - d$percent.hit
+#   d$percent.read.hit <- 100 * (d$total.read.hits.per.sec / d$total.reads.per.sec)
+#   d$percent.write.hit <- 100 * ((d$random.write.hits.per.sec + d$seq.write.hits.per.sec) / d$total.writes.per.sec)
+#   d$percent.read.miss <- 100 * (d$total.read.misses.per.sec / d$total.reads.per.sec)
+#   d$percent.write.miss <- 100 * (d$total.write.misses.per.sec / d$total.writes.per.sec)
+#   d$percent.sequential.io <- 100 * (d$total.seq.ios.per.sec / d$total.ios.per.sec)
+#   d$percent.sequential.writes <- 10 * (d$seq.writes.per.sec / d$total.ios.per.sec)
+   d$HA.Kbytes.transferred.per.sec <- d$Kbytes.read.per.sec + d$Kbytes.written.per.sec
+#   d$average.read.size.in.Kbytes <- d$Kbytes.read.per.sec / d$total.reads.per.sec
+#   d$average.write.size.in.Kbytes <- d$Kbytes.written.per.sec / d$total.writes.per.sec
+   d$average.io.size.in.Kbytes <- d$HA.Kbytes.transferred.per.sec / d$total.ios.per.sec
+   d$DA.Kbytes.transferred.per.sec <- d$DA.Kbytes.read.per.sec + d$DA.Kbytes.written.per.sec
+#   d$percent.read.hit.of.ios <- 100 * (d$total.read.hits.per.sec / d$total.ios.per.sec)
+#   d$percent.read.miss.of.ios <- 100 * (d$total.read.misses.per.sec / d$total.ios.per.sec)
+#   d$percent.write.hit.of.ios <- 100 * ((d$random.write.hits.per.sec + d$seq.write.hits.per.sec) / d$total.ios.per.sec)
+#   d$percent.write.miss.of.ios <- 100 * (d$total.write.misses.per.sec / d$total.ios.per.sec)
+#   d$device.capacity.in.MB <- (d$device.capacity/(2^20)) * d$device.block.size 
+  return(d)
+}
+
+devread <- function(filename,rows){
+  # read all of the columns of the Device table
+  # perhaps this should go away, and just use abreviatedDevRead ?
+  #
+  cols <- c('integer','factor',rep('numeric',56))
+  d<-read.table(filename,header = T, colClasses=cols, stringsAsFactors = F,sep=',',nrows=rows)
+  d <- calcDerived(d)
   return(d)
 }
 
 abbreviatedDevRead <- function(filename,rows){
-  filename <- '/data/HK19260257/output/cdd'
   # use scan directly, don't keep columns we don't use
   # to reduce memory demands
-
-  hdr <- getheaders()
-  what <- as.list(c('numeric','character',rep('numeric',58)))
-  
-  d <- as.data.frame(matrix(nrow=60,ncol=60,byrow=TRUE))
-  d<-as.data.frame(scan(file=filename,skip=1,nlines=10000,sep=",",what=what))
-  names(d) <- hdr$var
+  # uses the getcolumns() function as a helper for book keeping about
+  # which to keep.
+  hdrs <- getcolumns()
+  cols <- as.vector(hdrs$vartyp)
+  d <-read.table(filename,header=T,sep=',',stringsAsFactors = T, colClasses = cols,nrows=rows)
+  d <- calcDerived(d)
 }
 
-getheaders <- function() {
+getcolumns <- function() {
   # convenience routine
   # loads the headers data frame
   # which tell which columns to consider for reporting
   # and thus read into the dataframe
+  # Column One is the variable name a the time this function was written
+  # Column Two is the colClasses field in read.table
+  # typically numeric or NULL
   
   v <- c( 
-    "TimeStamp",TRUE,
-    "device.name",TRUE,
-    "random.ios.per.sec",TRUE,
-    "random.reads.per.sec",TRUE,
-    "random.writes.per.sec",TRUE,
-    "random.hits.per.sec",TRUE,
-    "random.read.hits.per.sec",TRUE,
-    "random.write.hits.per.sec",TRUE,
-    "seq.reads.per.sec",TRUE,
-    "seq.read.hits.per.sec",TRUE,
-    "seq.writes.per.sec",FALSE,
-    "seq.write.hits.per.sec",FALSE,
-    "Kbytes.read.per.sec",TRUE,
-    "Kbytes.written.per.sec",TRUE,
-    "DA.read.requests.per.sec",FALSE,
-    "DA.write.requests.per.sec",FALSE,
-    "DA.prefetched.tracks.per.sec",FALSE,
-    "DA.prefetched.tracks.used.per.sec",FALSE,
-    "DA.Kbytes.read.per.sec",FALSE,
-    "DA.Kbytes.written.per.sec",FALSE,
-    "DA.req.time.per.sec",FALSE,
-    "DA.disk.time.per.sec",FALSE,
-    "DA.task.time.per.sec",FALSE,
-    "write.pending.count",FALSE,
-    "max.write.pending.threshold",FALSE,
-    "sampled.read.time.per.sec",FALSE,
-    "sampled.write.time.per.sec",FALSE,
-    "sampled.read.miss.time.per.sec",FALSE,
-    "sampled.WP.disconnect.time.per.sec",FALSE,
-    "sampled.RDF.write.time.per.sec",FALSE,
-    "sampled.reads.per.sec",FALSE,
-    "sampled.writes.per.sec",FALSE,
-    "sampled.read.miss.waits.per.sec",FALSE,
-    "sampled.WP.disconnects.per.sec",FALSE,
-    "sampled.RDF.write.waits.per.sec",FALSE,
-    "num.invalid.tracks",FALSE,
-    "M1.invalid.tracks",FALSE,
-    "M2.invalid.tracks",FALSE,
-    "M3.invalid.tracks",FALSE,
-    "M4.invalid.tracks",FALSE,
-    "DA.partial.sector.write.Kbytes.per.sec",FALSE,
-    "DA.optimize.write.Kbytes.per.sec",FALSE,
-    "DA.xor.reads.per.sec",FALSE,
-    "DA.xor.Kbytes.read.per.sec",FALSE,
-    "DA.read.for.copy.per.sec",FALSE,
-    "DA.Kbytes.read.for.copy.per.sec",FALSE,
-    "DA.writes.for.copy.per.sec",FALSE,
-    "DA.Kbytes.written.for.copy.per.sec",FALSE,
-    "DA.read.for.vlun.migration.per.sec",FALSE,
-    "DA.Kbytes.read.for.vlun.migration",FALSE,
-    "DA.writes.for.vlun.migration.per.sec",FALSE,
-    "DA.Kbytes.written.for.vlun.migration",FALSE,
-    "DA.writes.for.rebuild.per.sec",FALSE,
-    "DA.Kbytes.written.for.rebuild.per.sec",FALSE,
-    "rdf.copy.per.sec",FALSE,
-    "rdf.copy.Kbytes.per.sec",FALSE,
-    "device.capacity",FALSE,
-    "device.block.size",FALSE,
-    "optimized.read.miss.Kbytes",FALSE,
-    "optimized.read.miss",FALSE
+    "TimeStamp",'integer',
+    "device.name",'factor',
+    "random.ios.per.sec",'integer',
+    "random.reads.per.sec",'integer',
+    "random.writes.per.sec",'integer',
+    "random.hits.per.sec",'integer',
+    "random.read.hits.per.sec",'integer',
+    "random.write.hits.per.sec",'integer',
+    "seq.reads.per.sec",'integer',
+    "seq.read.hits.per.sec",'integer',
+    "seq.writes.per.sec",'integer',
+    "seq.write.hits.per.sec",'integer',
+    "Kbytes.read.per.sec",'integer',
+    "Kbytes.written.per.sec",'integer',
+    "DA.read.requests.per.sec",'NULL',
+    "DA.write.requests.per.sec",'NULL',
+    "DA.prefetched.tracks.per.sec",'NULL',
+    "DA.prefetched.tracks.used.per.sec",'NULL',
+    "DA.Kbytes.read.per.sec",'numeric',
+    "DA.Kbytes.written.per.sec",'numeric',
+    "DA.req.time.per.sec",'NULL',
+    "DA.disk.time.per.sec",'NULL',
+    "DA.task.time.per.sec",'NULL',
+    "write.pending.count",'NULL',
+    "max.write.pending.threshold",'NULL',
+    "sampled.read.time.per.sec",'numeric',
+    "sampled.write.time.per.sec",'numeric',
+    "sampled.read.miss.time.per.sec",'NULL',
+    "sampled.WP.disconnect.time.per.sec",'NULL',
+    "sampled.RDF.write.time.per.sec",'NULL',
+    "sampled.reads.per.sec",'numeric',
+    "sampled.writes.per.sec",'numeric',
+    "sampled.read.miss.waits.per.sec",'NULL',
+    "sampled.WP.disconnects.per.sec",'NULL',
+    "sampled.RDF.write.waits.per.sec",'NULL',
+    "num.invalid.tracks",'NULL',
+    "M1.invalid.tracks",'NULL',
+    "M2.invalid.tracks",'NULL',
+    "M3.invalid.tracks",'NULL',
+    "M4.invalid.tracks",'NULL',
+    "DA.partial.sector.write.Kbytes.per.sec",'NULL',
+    "DA.optimize.write.Kbytes.per.sec",'NULL',
+    "DA.xor.reads.per.sec",'NULL',
+    "DA.xor.Kbytes.read.per.sec",'NULL',
+    "DA.read.for.copy.per.sec",'NULL',
+    "DA.Kbytes.read.for.copy.per.sec",'NULL',
+    "DA.writes.for.copy.per.sec",'NULL',
+    "DA.Kbytes.written.for.copy.per.sec",'NULL',
+    "DA.read.for.vlun.migration.per.sec",'NULL',
+    "DA.Kbytes.read.for.vlun.migration",'NULL',
+    "DA.writes.for.vlun.migration.per.sec",'NULL',
+    "DA.Kbytes.written.for.vlun.migration",'NULL',
+    "DA.writes.for.rebuild.per.sec",'NULL',
+    "DA.Kbytes.written.for.rebuild.per.sec",'NULL',
+    "rdf.copy.per.sec",'NULL',
+    "rdf.copy.Kbytes.per.sec",'NULL',
+    "device.capacity",'NULL',
+    "device.block.size",'NULL',
+    "optimized.read.miss.Kbytes",'NULL',
+    "optimized.read.miss",'NULL'
   )
   hdr <- as.data.frame(matrix(data=v,nrow=60,ncol=2,byrow=TRUE))
-  names(hdr) <- c('varnm','keep')
+  names(hdr) <- c('varnm','vartyp')
   return(hdr)
 }
 
@@ -291,7 +304,9 @@ datad <- paste(xdir,'output',sep='/')
 fname <- paste(datad,"Devices",sep = '/')
 
 print('reading ttp data for devices')
-devs <- devread(fname,rows=-1)
+# devs <- devread(fname,rows=-1)
+devs <- abbreviatedDevRead(fname,rows=1e7)
+
 print('reading Storage Group XML')
 stgroups <-parseSG(sgfile)
 serialnumber <- as.character(unique(stgroups$symid))

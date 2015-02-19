@@ -1,5 +1,5 @@
 
-filename <- 'System'
+
 sysread <- function(filename){
   
   s<-read.table(filename,header = T, stringsAsFactors = F,sep=',')
@@ -65,21 +65,41 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
 
 
 library(dplyr)
-sys <- sysread("System")
+sys <- sysread("/data/new/System")
+serialnum = 'HK192602527'
+# 1,000,000 IOPS is unreasonable and bad data.
+threshold = 1e6
+bad <- count(filter(sys,ios.per.sec>threshold))
+if (bad > 0) {
+  print(paste('warning:',bad,'extreme data points delete.'))
+  sys <- sys %>% filter(!ios.per.sec>1e6) %>% arrange(TimeStamp)  
+}
+begin <- min(sys$TimeStamp)
+end <- max(sys$TimeStamp)
+# plot(sys$TimeStamp,sys$TimeStamp,typ='p',pch=19,pex=.1)
 
-sys <- sys %>% filter(!ios.per.sec>1000000) %>% arrange(TimeStamp)
-
-plot(sys$TimeStamp,sys$ios.per.sec,col='darkblue',typ='l')
-lines(sys$TimeStamp,smooth(sys$ios.per.sec),typ='l')
+dev.off()
+par(cex=0.4,mar=c(4,4,8,1),mfrow=c(2,1))
 
 
-
-plot(sys$TimeStamp,sys$TimeStamp,typ='l')
-plot(sys$TimeStamp,sys$ios.per.sec,type='l',col='darkblue',xlab='IOPS',lwd='2')
-
-
+# IOPS
+plot(sys$TimeStamp,sys$ios.per.sec,type='p',pch=19,cex.main=.8,cex=.5,col='darkblue',lwd='2',
+     main=paste(serialnum,'IOPS',"\nstart:",begin,"\nend:",end),xlab='',ylab='',xaxt='n')
+grid(nx = 10, ny = 6, col = "lightgray", lty = "dotted", lwd = par("lwd"), equilogs = FALSE)
+axis.POSIXct(1, at=seq(begin,end,by="hour"), cex.axis=0.6,format="%a\n%R\n%D",col.ticks='darkblue') #label the x axis
 lines(supsmu(sys$TimeStamp,sys$ios.per.sec),lwd=4)
-abline(h=mean(sys$ios.per.sec),col='grey',lwd=2,lty=4)
+abline(h=mean(sys$ios.per.sec),col='red3',lwd=2,lty=4)
+abline(h=quantile(sys$ios.per.sec,c(0.98)),col='red',lwd=1,lty=2)
 
+# BW
+# Change from kBytes/Sec to MBytes/Sec
+sys$Mbytes.transferred.per.sec = sys$Kbytes.transferred.per.sec/2^10
+plot(sys$TimeStamp,sys$Mbytes.transferred.per.sec,type='p',pch=19,cex.main=.8,cex=.5,col='darkgreen',lwd='2',
+     main=paste(serialnum,'MBytes/sec',"\nstart:",begin,"\nend:",end),xlab='',ylab='',xaxt='n')
+grid(nx = 10, ny = 6, col = "lightgray", lty = "dotted", lwd = par("lwd"), equilogs = FALSE)
+axis.POSIXct(1, at=seq(begin,end,by="hour"), cex.axis=0.6,format="%a\n%R\n%D") #label the x axis
+lines(supsmu(sys$TimeStamp,sys$Mbytes.transferred.per.sec),lwd=4)
+abline(h=mean(sys$Mbytes.transferred.per.sec),col='red3',lwd=2,lty=4)
+abline(h=quantile(sys$Mbytes.transferred.per.sec,c(0.98)),col='red',lwd=1,lty=2)
 
 
