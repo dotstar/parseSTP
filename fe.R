@@ -1,26 +1,9 @@
 
-sysread <- function(filename){
-  
-  s<-read.table(filename,header = T, stringsAsFactors = F,sep=',')
-  s<-tbl_df(s)
-  s$TimeStamp<-as.POSIXct(s$TimeStamp,origin = "1970-01-01",tz="GMT")
-  # plot(s$ios.per.sec,type='l',x=s$TimeStamp)
-  s$total.reads.per.sec <- s$reads.per.sec + s$seq.reads.per.sec
-  s$total.ios.per.sec <- s$reads.per.sec + s$seq.reads.per.sec + s$writes.per.sec
-  s$percent.reads <- 100 * (s$total.reads.per.sec / s$total.ios.per.sec)
-  s$percent.writes <- 100 * (s$writes.per.sec / s$total.ios.per.sec)
-  s$percent.hit <- 100 * (s$hits.per.sec/s$total.ios.per.sec)
-  s$Kbytes.transferred.per.sec <- s$Kbytes.written.per.sec + s$Kbytes.read.per.sec
-  s$percent.sequential.io <- 100 * (s$seq.reads.per.sec / s$total.ios.per.sec)
-  plot(s$TimeStamp,s$TimeStamp,type='l')
-  return(s)
-}
-
-feread <- function(filename) {
+feread <- function(filename,nrows=-1) {
   # open the Front End Directors file
   # and apply the derived calculations.
 
-  fe<-read.table(filename,header=T,sep=",",stringsAsFactors=F)
+  fe<-read.table(filename,header=T,sep=",",stringsAsFactors=F,nrows=nrows)
   fe <- tbl_df(fe)
   fe$TimeStamp <- as.POSIXct(fe$TimeStamp,origin="1970-01-01",tz="GMT")
   fe$director.number <- as.factor(fe$director.number)
@@ -82,6 +65,7 @@ feboxplot <- function(df) {
           xlab='Service Time (mSec)',
           col=c('green','blue','purple','red','orange'),
           main='Read Service Time by Front End Director',
+          outline=F,
           sub=paste('start time: ',from,'end time: ',to))
 
   boxplot(write~dir,data=t2,las=2,cex.axis=.4,
@@ -90,6 +74,7 @@ feboxplot <- function(df) {
           xlab='Service Time (mSec)',          
           col=c('green','blue','purple','red','orange'),
           main='Write Service Time by Front End Director',
+          outline=F,
           sub=paste('start time: ',from,'end time: ',to))
 }
 
@@ -138,8 +123,19 @@ fedetails <-function(df) {
   times <- tbl_df(times)
   
 
-  
+  # For debugging, give an opt out after N directors
+  # Set n <- -1 for running all director plots
+  # Set n <- #  to stop after # director plots
+  n <- -1
   for (d in dirs) {
+    if ( n >= 0 ) {
+      # if we're debugging (n=-1 to turn off)
+      if( n == 0) {
+        break
+      } else {
+        n = n - 1
+      }
+    }
     cat ('processing graphs for director',d,'\n')
     
     # IOPS
@@ -149,13 +145,13 @@ fedetails <-function(df) {
     x <- t1$TimeStamp
     y <- t1$ios.per.sec
     if (length(x) == 0 || length(y) ==0) {
-      cat('detected empty data - skipping director',d)
+      cat('detected empty data - skipping director',d,'\n')
       next
     }
     t <- paste('Front End ',d, 'IOPS')
 
-    plot(x,y,ylab='I/O / Sec',cex.axis=0.75,col='firebrick4',main=t)
-    lines(supsmu(x,y),col='chocolate4',lwd=3)
+    plot(x,y,ylab='I/O / Sec',pch=20,cex.axis=0.75,col='firebrick2',main=t,xlab='')
+    lines(supsmu(x,y),col='black',lwd=3)
     abline(h=mean(y),lty=2)
     
 
@@ -174,6 +170,7 @@ fedetails <-function(df) {
     
     points(x=t1$TimeStamp,y=y1,col='green',pch=19,cex=.5,xlab='',ylab='')
     abline(h=mean(y1),col='green',lty=2)
+    # legend(0,1,c('port 0','port 1'))
 
     t <- paste(d,"Read Bandwidth (MB/Sec)")
     title(main=t)    
@@ -197,18 +194,53 @@ fedetails <-function(df) {
     t <- paste(d,"Write Bandwidth (MB/Sec)")
     title(main=t)
 
+    #  estmate queue lengths
+    # Assume it is open systems for now.
+    open <- c(0,5,10,20,40,80,160,320,640,1280)
+    openmid <- as.vector(mode='numeric',open/2)
+    
+    # just work with this director
+    d2 <- filter(df,director.number == d)
+    q <- select(d2,queue.depth.count.range.0:queue.depth.count.range.9)
+    
+    setnames(q,c('r0','r1','r2','r3','r4','r5','r6','r7','r8','r9'))
+    
+    barplot(as.matrix(q),main=paste(d,'queue.depth.count.range buckets'))
+    
+    addem <- function(v1,v2) { 
+      # dot product of buckets to estimate the queue length
+      zed <- function (x) { 
+        # zero out Na and Inf Values.
+        if (is.finite(x)) {x }
+        else { 0 }  
+      }
+      sapply(v1,zed)  # Zero out NA and Inf values
+      sum(v1*v2) 
+    }
+    qlen <- apply(q,1,addem,openmid) # Compute Dot products, then count the IOPS, the divide to make an average ?
+    iocount <- apply(q,1,sum)
+    qlen <- qlen/iocount
+    plot(d2$TimeStamp,qlen,pch=19,col='purple',main=paste(d,'Estimate Queue Length'),xlab='',ylab='est queue length')
+    abline(h=mean(qlen),lty=2)
+    
+    hist(qlen,breaks=128,col='purple',main=paste(d,'Estimated Queue Length'))
+    abline(v=mean(qlen),lty=2)
+    
+    
+    
     # Read Service Time
     t1<-select(filter(times,director.number==d),TimeStamp,average.read.time.ms)
     t1 <-t1[complete.cases(t1),]
     t1 <- filter(t1,average.read.time.ms != Inf)
     x<-t1[[1]]
-    y<-t1[[2]]
-    plot(x,y,ylab='mSec',xlab='',col='gold',pch=19,cex.axis=0.75,main=(paste('Director:',d,'Read Service Time (mSec')))
-    abline(h=mean(y),col='gold',lty=2)
-    lines(supsmu(x,y),col='black',lwd=3)
+    rst<-t1[[2]]   # Read Service Time
+    plot(x,y=rst,ylab='mSec',xlab='',col='gold',pch=20,cex.axis=0.75,main=(paste('Director:',d,'Read Service Time (mSec')))
+    abline(h=mean(rst),col='blue3',lty=2,lwd=2)
+    lines(supsmu(x,rst),col='grey2',lwd=1)
+
     
-    b<- 100
-    hist(y,breaks=b,main=paste(d,'Read Service Time (mSec)'),ylab='Frequency',xlab='',col='gold')
+    
+    hist(y,breaks=128,main=paste(d,'Read Service Time (mSec)'),ylab='Frequency',xlab='',col='gold')
     abline(v=mean(y),lty=2)
 
     # Write Service Time
@@ -216,41 +248,18 @@ fedetails <-function(df) {
     t1 <-t1[complete.cases(t1),]
     t1 <- filter(t1,average.write.time.ms != Inf)
     x<-t1[[1]]
-    y<-t1[[2]]
-    plot(x,y,t=,ylab='mSec',xlab='',cex.axis=0.75,col='green4',pch=19,main=(paste('Director:',d,'Write mSec Service Time')))
-    abline(h=mean(y),col='green4',lty=2)
-    lines(supsmu(x,y),col='black',lwd=3)
+    wst <-t1[[2]]   # Write Service Time
+    plot(x,y=wst,t=,ylab='mSec',xlab='',cex.axis=0.75,col='green4',pch=19,main=(paste('Director:',d,'Write mSec Service Time')))
+    abline(h=mean(wst),col='blue3',lty=2,lwd=2)
+    lines(supsmu(x,wst),col='black',lwd=3)
     
-    hist(y,breaks=b,main=paste(d,'Write Service Time (mSec)'),col='green4',ylab='Frequency',xlab='')        
+    hist(y,breaks=128,main=paste(d,'Write Service Time (mSec)'),col='green4',ylab='Frequency',xlab='')        
     abline(v=mean(y),lty=2)
-    # 8th plot - estmate queue lengths
-    # Assume it is open systems for now.
-    open <- c(0,5,10,20,40,80,160,320,640,1280)
-    openmid <- as.vector(mode='numeric',open/2)
     
-    # just work with this director
-      d2 <- filter(df,director.number == d)
-      q <- select(d2,average.queue.depth.range.0:average.queue.depth.range.9)
-            
-      addem <- function(v1,v2) { 
-        # dot product of buckets to estimate the queue length
-        # Remove NA from the calculation
-        i <- complete.cases(as.vector(mode='numeric',v1)) 
-        v1 <- v1[i]
-        v2 <- v2[i]
-        # Remove Inf values.
-        i <- v1 != Inf
-        v1 <- v1[i]
-        v2 <- v2[i]
-        sum(v1*v2) 
-      }
-      qlen <- apply(q,1,addem,openmid)
-      plot(d2$TimeStamp,qlen,pch=19,col='purple',main=paste(d,'Estimate Queue Length'),xlab='',ylab='est queue length')
-      hist(qlen,breaks=128,col='purple',main=paste(d,'Estimated Queue Length'))
-      abline(v=mean(qlen),lty=2)
+
     
+
       # Fill the page with empty plots.
-    plot.new()
     plot.new()
     plot.new()
     plot.new()
@@ -263,15 +272,14 @@ fedetails <-function(df) {
 
 library(dplyr)
 datad <- "~/parseSTP/data/output8"
-datad <- "/media/cdd/D667-9E25/MasterCard/0621-stp/output"
+datad <- "/data/new"
 fname <- paste(datad,"Directors FE",sep = '/')
-fe <- feread(fname)
+fe <- feread(fname,nrows=-1)
 
 # pdf(file="Rplots.pdf",width=14,height=8.5)
-# feboxplot(fe)
-# fedetails(fe)
-# dev.off()
-
+feboxplot(fe)
+fedetails(fe)
+stop()
 # summarize front end stats in table
 st<-fe %>% 
   group_by(director.number)  %>%
@@ -284,34 +292,37 @@ st<-fe %>%
   arrange(desc(mean_wrt))
 
 # Density plots
-par(mfrow=c(4,4), mar=c(5.5,3,2,2))
 dirs <- getdirs(fe)
 
 ff <- select(fe,director.number,average.write.time.ms,average.read.time.ms)
-fr <- filter(ff,! is.na(average.read.time.ms))
-fr <- filter(ff,average.read.time.ms < Inf)
-fw <- filter(ff,! is.na(average.write.time.ms))
-fw <- filter(ff,average.write.time.ms < Inf)
+fr <- filter(ff,is.finite(average.read.time.ms))
+fw <- filter(ff,is.finite(average.write.time.ms))
 
+
+# Where we have data, plot the histogram of the read service time
+par(mfrow=c(4,4))
+# nf <- layout(mat = matrix(c(1,2),2,1, byrow=TRUE),  height = c(3,1))
+# par(mar=c(3.1, 3.1, 1.1, 2.1))
 for (dir in dirs) {
   d <- filter(fr, director.number == dir )
   # Reads
   x <- d$average.read.time.ms
-
-  # Find everything about the 99th quantile and set = 99th quantile
-  topvalue <- as.numeric(quantile(x,c(0.99)))
-  x[x > topvalue] <- topvalue 
-  n <-  topvalue
-  breaks = 512
-  # par(fig=c(1,1,1,01),new=T)
-  # hist(x,main=paste(dir,'avg read svc mSec'),xlab='mSec',breaks,xlim=c(0,n),add=F)
-  hist(x,breaks,add=F)
-  par(fig=c(0,0.8,0.55,1),new=F)
-  boxplot(x, outline=F, horizontal = T, add=T, col = c('blue4','chocolate4'),pars = list(boxwex = 1),axes=FALSE )
+  x <- x[is.finite(x)]
+  if ( length(x)>0 ) {
+    # Find everything about the 99th quantile and set = 99th quantile
+    topvalue <- as.numeric(quantile(x,c(0.99)))
+    x[x > topvalue] <- topvalue 
+    n <-  topvalue
+    breaks = 128
+    
+    xmin <- min(x)
+    xmax <- max(x)
   
-}
+    main=paste(dir,'read svc time mSec')
+    hist(x,breaks,xlim<-c(xmin,xmax),add=F,main=main,xlab='')
+    abline(,v=mean(x),col='blue3',lwd=2)
+  } # end if
 
-{
   # Writes
   d <- filter(fw, director.number == dir )
   x <- d$average.write.time.ms
@@ -319,8 +330,8 @@ for (dir in dirs) {
   topvalue <- as.numeric(quantile(x,c(0.99)))
   x[x > topvalue] <- topvalue 
   n <-  topvalue
-  breaks = topvalue * 10
-  breaks <- 512
-  hist(x,main=paste(dir,'avg write svc mSec'),xlab='mSec',breaks,xlim=c(0,n))
+  hist(x,main=paste(dir,'write svc time mSec'),xlab='mSec',breaks)
+  abline(,v=mean(x),col='green3',lwd=2)
+  
 }
 
