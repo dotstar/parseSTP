@@ -518,7 +518,7 @@ def ccat(f,srcdir,tgtdir):
     return rc
 
 def copyfiles(ddir,odir):
-    dirs = sorted(os.listdir(ddir))
+    dirs = sorted(os.listdir(ddir),key=int)
     dlist = []   # Directories to consolidate
     for dir in dirs:
         if re.match("[0-9]{1,4}$",dir) and os.path.isdir("data"+"/"+dir):
