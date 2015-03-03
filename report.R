@@ -204,44 +204,55 @@ diskReports <- function (fname) {
     max_scsi = max(total.SCSI.command.per.sec),
     mean_scsi = mean(total.SCSI.command.per.sec)
   ) %>% arrange(desc(max_scsi))
-  topN <- head(t$device,18)
-  par(mfrow = c(2,2))
+  topN <- head(t$device,9)
+  par(mfrow = c(3,3), mar=c(2,2,2,1))
   for (n in topN) {
     local <- filter(d,device==n)
-    with (local, plot(TimeStamp,total.SCSI.command.per.sec,pch=19,cex=0.4,col='blue',main=n))
-    with (local, lines(supsmu(TimeStamp,total.SCSI.command.per.sec),col='black',lwd=3) )
-    with(local, abline(h=mean(total.SCSI.command.per.sec)))
+    local <- arrange(local,TimeStamp)
+    yrange<-range(d$total.SCSI.command.per.sec,d$write.commands.per.sec,d$read.commands.per.sec,na.rm=T)
+    attach(local)
+    plot(TimeStamp,total.SCSI.command.per.sec,pch=19,cex=0.4,col='blue',
+                      main=paste(n,'SCSI cmds per sec'),ylim=yrange,xlab='')
+    # legend('bottomright',legend=c('scsi cmds','writes','reads'),text.col=c('blue','red4','green4'),border='black',cex=0.6)
+    lines(supsmu(TimeStamp,total.SCSI.command.per.sec),col='black',lwd=1) 
+    lines(TimeStamp,write.commands.per.sec,col='red4',lwd=2)
+    lines(supsmu(TimeStamp,write.commands.per.sec),col='black',lwd=2)
+    lines(TimeStamp,read.commands.per.sec,col='green4',lwd=2)
+    lines(supsmu(TimeStamp,read.commands.per.sec),col='black',lwd=2)
+    abline(h=mean(total.SCSI.command.per.sec))
+    detach(local)
   }
   
-  ### System Wide Write BW to Disk
-  par(mfrow = c(1,1))
-  # remove Spurious values
-  t <- d[d$Kbytes.written.per.sec<1e9,]
-  sums <- t %>% group_by(TimeStamp) %>% summarise ( MBps = sum(Kbytes.written.per.sec)/2^10)
-  with (t, plot(sums$TimeStamp,sums$MBps,pch=19,cex=0.3,col='red',main='Frame Disk BW - MBps') )
-  with (t, lines(supsmu(sums$TimeStamp,sums$MBps),pch=19,cex=0.3,col='blue',main='Frame Disk BW - MBps') )
-  with (t, abline(h=mean(sums$MBps),col='black',lty=2) )
-  
-  ## Disk I/O Sizes - Frame wide
-  par(mfrow = c(2,1)) 
-  
-  rm.Inf <- function(x,var) {
-    t<-x[!is.na(x[,var]),]   
-    t <- t[t[,var] < 1e9,]  
-    return (t)
+  if ( FALSE ) {  # disabled for debugging.
+    ### System Wide Write BW to Disk
+    par(mfrow = c(1,1))
+    # remove Spurious values
+    t <- d[d$Kbytes.written.per.sec<1e9,]
+    sums <- t %>% group_by(TimeStamp) %>% summarise ( MBps = sum(Kbytes.written.per.sec)/2^10)
+    with (t, plot(sums$TimeStamp,sums$MBps,pch=19,cex=0.3,col='red',main=paste(serialnumber,'Frame Disk BW - MBps') ))
+    with (t, lines(supsmu(sums$TimeStamp,sums$MBps),lwd=2,pch=19,cex=0.3,col='blue') )
+    with (t, abline(h=mean(sums$MBps),col='black',lwd=2,lty=2) )
+    
+    ## Disk I/O Sizes - Frame wide
+    par(mfrow = c(2,1)) 
+    
+    rm.Inf <- function(x,var) {
+      t<-x[!is.na(x[,var]),]   
+      t <- t[t[,var] < 1e9,]  
+      return (t)
+    }
+    
+    t <- rm.Inf(d,'average.kbytes.per.read')
+    summary(t$average.kbytes.per.read)
+    
+    hist(t$average.kbytes.per.read,col='red4',breaks=128,main=paste(serialnum,'Average kBytes/read'),xlab='' )
+    abline(v=mean(t$average.kbytes.per.read),col='black',lwd=3)
+    
+    
+    t<- rm.Inf(d,'average.kbytes.per.write')
+    hist(t$average.kbytes.per.write,col='blue4',breaks=128,main=paste(serialnum,'Average kBytes/write'),xlab='' )
+    abline(v=mean(t$average.kbytes.per.write),col='black',lwd=3)
   }
-  
-  t <- rm.Inf(d,'average.kbytes.per.read')
-  summary(t$average.kbytes.per.read)
-  
-  hist(t$average.kbytes.per.read,col='red4',breaks=128,main=paste(serialnum,'Average kBytes/read'),xlab='' )
-  abline(v=mean(t$average.kbytes.per.read),col='black',lwd=3)
-  
-  
-  t<- rm.Inf(d,'average.kbytes.per.write')
-  hist(t$average.kbytes.per.write,col='blue4',breaks=128,main=paste(serialnum,'Average kBytes/write'),xlab='' )
-  abline(v=mean(t$average.kbytes.per.write),col='black',lwd=3)
-
 }
 
 serialnum <- "HK19570227"
@@ -253,8 +264,7 @@ devfile <- paste(dir,'Devices',sep='/')     # Devices
 fefile <- paste(dir,'Directors FE',sep='/') # Front End Directors
 diskfile <- paste(dir,'Disks',sep='/')
 
-systemReports(sysfile)
-
+# systemReports(sysfile)
 # devReports(devfile,sgfile,count=-1)
 # feReports(fefile)
-# diskReports(diskfile)
+diskReports(diskfile)
