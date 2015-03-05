@@ -195,7 +195,7 @@ feReports <- function (fname) {
 }
 
 diskReports <- function (fname) {
-  d <- diskread(fname)
+  d <- diskread(fname,nrows=1e5)
   # Summaries
   ### Top SCSCI Commands Per Second
   options(digits=1)
@@ -204,8 +204,8 @@ diskReports <- function (fname) {
     max_scsi = max(total.SCSI.command.per.sec),
     mean_scsi = mean(total.SCSI.command.per.sec)
   ) %>% arrange(desc(max_scsi))
-  topN <- head(t$device,9)
-  par(mfrow = c(3,3), mar=c(2,2,2,1))
+  topN <- head(t$device,4)
+  par(mfrow = c(2,2), mar=c(2,2,2,1))
   for (n in topN) {
     local <- filter(d,device==n)
     local <- arrange(local,TimeStamp)
@@ -220,16 +220,18 @@ diskReports <- function (fname) {
     lines(TimeStamp,read.commands.per.sec,col='green4',lwd=2)
     lines(supsmu(TimeStamp,read.commands.per.sec),col='black',lwd=2)
     abline(h=mean(total.SCSI.command.per.sec))
+    # Add a makeshift legend
+    legend(x='bottomright',legend=c('cmd/sec','rd/sec','wr/sec'),bty='n',text.col=c('blue','green4','red4'),y.intersp=0,x.intersp=0,xjust=0,yjust=0,cex=0.9,horiz=T)
     detach(local)
   }
   
-  if ( FALSE ) {  # disabled for debugging.
+  if ( TRUE ) {  # disabled for debugging.
     ### System Wide Write BW to Disk
     par(mfrow = c(1,1))
     # remove Spurious values
     t <- d[d$Kbytes.written.per.sec<1e9,]
     sums <- t %>% group_by(TimeStamp) %>% summarise ( MBps = sum(Kbytes.written.per.sec)/2^10)
-    with (t, plot(sums$TimeStamp,sums$MBps,pch=19,cex=0.3,col='red',main=paste(serialnumber,'Frame Disk BW - MBps') ))
+    with (t, plot(sums$TimeStamp,sums$MBps,pch=19,cex=0.3,col='red',main=paste(serialnum,'Frame Disk BW - MBps') ))
     with (t, lines(supsmu(sums$TimeStamp,sums$MBps),lwd=2,pch=19,cex=0.3,col='blue') )
     with (t, abline(h=mean(sums$MBps),col='black',lwd=2,lty=2) )
     
@@ -243,7 +245,7 @@ diskReports <- function (fname) {
     }
     
     t <- rm.Inf(d,'average.kbytes.per.read')
-    summary(t$average.kbytes.per.read)
+    # summary(t$average.kbytes.per.read)
     
     hist(t$average.kbytes.per.read,col='red4',breaks=128,main=paste(serialnum,'Average kBytes/read'),xlab='' )
     abline(v=mean(t$average.kbytes.per.read),col='black',lwd=3)
@@ -253,6 +255,43 @@ diskReports <- function (fname) {
     hist(t$average.kbytes.per.write,col='blue4',breaks=128,main=paste(serialnum,'Average kBytes/write'),xlab='' )
     abline(v=mean(t$average.kbytes.per.write),col='black',lwd=3)
   }
+  
+  # Look at seek distance
+  topseeks <- d %>% group_by(device) %>% summarize(
+    max_seeks_per_sec = max(seeks.per.sec),
+    max_seek_distance = max(seek.distance.per.sec)
+  ) %>% arrange(desc(max_seek_distance))
+  
+  # topseeks$device <- as.factor(topseeks$device)
+  # Source of outliers here.  Not understood.  We are seeing 1E16 seeks.
+  # Remove topseeks > 1E6
+  topseeks <- filter(topseeks,max_seek_distance<1e6)
+  n <- 5
+  s10 <- head(topseeks,n)
+  d2 <- filter(d,device %in% s10$device)
+  d2$device <- as.factor(d2$device) 
+  plot(d2$TimeStamp,d2$seeks.per.sec,pch=20,cex=.3,col=d2$device,main=paste(serialnum,'top',n,'devices - seeks per second'))
+
+  rm (d2)
+  # Look at read and write times by device type
+  x <- select(d, tech.type,average.read.time.ms,average.write.time.ms)
+  x$tech.type <- as.factor(x$tech.type)
+  ## TTP data has some nasty outliers.  Remove Infinities and > 1e6 ms
+  x <- filter(x,average.read.time.ms <1e6,average.write.time.ms<1e6)
+  par(mfrow = c(2,3)) 
+  # Histograms for read time by drive type
+  for (t in unique(x$tech.type)) {
+     x1 = filter(x,tech.type == t)  
+     hist(x1$average.read.time.ms,breaks=dim(x)[1]/100,
+          main=paste(serialnum, 'avg read time in mSec\ndrive type:',t),col='green3',border='green3')
+  }
+  # Histograms for write time by drive type
+  for (t in unique(x$tech.type)) {
+    x1 = filter(x,tech.type == t)  
+    hist(x1$average.write.time.ms,breaks=dim(x)[1]/100,
+         main=paste(serialnum, 'avg write time in mSec\ndrive type:',t),col='blue3',border='blue3')
+  }
+  
 }
 
 serialnum <- "HK19570227"
