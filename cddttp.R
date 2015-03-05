@@ -573,9 +573,9 @@ fedetails <-function(df) {
     } # End For
 }
 
-diskread <- function(filename){
+diskread <- function(filename,nrows=-1){
   colClasses <- c('integer','factor','factor',rep('numeric',17))
-  d<-read.table(filename,header = T, colClasses= colClasses , stringsAsFactors = F,sep=',')
+  d<-read.table(filename,header = T, colClasses= colClasses , stringsAsFactors = F,sep=',',nrows=nrows)
   d<-tbl_df(d)
   d$TimeStamp<-as.POSIXct(d$TimeStamp,origin = "1970-01-01",tz="GMT")
   # plot(s$ios.per.sec,type='l',x=s$TimeStamp)
